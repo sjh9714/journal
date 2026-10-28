@@ -13,6 +13,9 @@ impl Client {
     fn spawn(root: &std::path::Path, extra: &[&str]) -> Self {
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_journal"));
         cmd.arg("--root").arg(root).arg("mcp").arg("serve").args(extra);
+        // The server derives new entries' zone from the environment; pin it so the
+        // assertions hold on any CI runner.
+        cmd.env("TZ", "Asia/Seoul");
         cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit());
         let mut child = cmd.spawn().unwrap();
         let reader = BufReader::new(child.stdout.take().unwrap());
