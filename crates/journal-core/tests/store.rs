@@ -10,6 +10,11 @@ fn tmp_store() -> (TempDir, Store) {
     (dir, store)
 }
 
+/// Paths come back with the platform separator; compare with forward slashes.
+fn slash(p: &std::path::Path) -> String {
+    p.to_string_lossy().replace('\\', "/")
+}
+
 fn at(s: &str) -> DateTime<FixedOffset> {
     DateTime::parse_from_rfc3339(s).unwrap()
 }
@@ -28,7 +33,7 @@ fn create_and_read_roundtrip() {
         .unwrap();
     assert_eq!(e.title(), "Hello");
     assert_eq!(e.meta.tags, vec!["life", "work"]);
-    assert!(e.path.to_string_lossy().starts_with("entries/2026/2026-10-28-"));
+    assert!(slash(&e.path).starts_with("entries/2026/2026-10-28-"));
     assert!(store.root().join(&e.path).exists());
 
     let back = store.get(&e.meta.uuid).unwrap();
@@ -160,7 +165,7 @@ fn attach_is_content_addressed() {
     let a = store.attach(&src).unwrap();
     let b = store.attach(&src).unwrap();
     assert_eq!(a, b);
-    assert!(a.to_string_lossy().starts_with("attachments/"));
-    assert!(a.to_string_lossy().ends_with(".png"));
+    assert!(slash(&a).starts_with("attachments/"));
+    assert!(slash(&a).ends_with(".png"));
     assert!(store.root().join(&a).exists());
 }
