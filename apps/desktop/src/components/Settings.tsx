@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { api, IN_TAURI } from "../api";
 import type { ImportReport, Status } from "../types";
 import { captureEnabled, setCaptureEnabled } from "../lib/enrich";
@@ -101,6 +101,15 @@ export function Settings({ status, theme, onTheme, onStatus, onImported }: {
         <p className="dim">Install the <span className="mono">journal</span> CLI, then let Claude Code read and write this journal:</p>
         <pre className="mono">{mcpCmd}</pre>
         <p className="dim">Add <span className="mono">--read-only</span> to allow reading only. Point it at this folder with <span className="mono">--root {status.root}</span> if it is not the default.</p>
+      </section>
+
+      <section>
+        <h3>Help</h3>
+        <p className="dim">Found a bug or an export that would not import? No telemetry leaves this app, so a report is the only way we hear about it.</p>
+        <div className="btn-row">
+          <button onClick={() => (IN_TAURI ? openUrl("https://github.com/sjh9714/journal/issues/new/choose") : window.open("https://github.com/sjh9714/journal/issues/new/choose"))}>Report a problem</button>
+          <button onClick={() => (IN_TAURI ? openUrl("https://github.com/sjh9714/journal") : window.open("https://github.com/sjh9714/journal"))}>Source on GitHub</button>
+        </div>
       </section>
 
       {msg && <p className="dim">{msg}</p>}

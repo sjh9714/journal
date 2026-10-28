@@ -1,0 +1,28 @@
+name: Bug
+description: Something broke
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version and platform
+      placeholder: "0.1.0, macOS 15 (Apple Silicon)"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What did you do, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: entry
+    attributes:
+      label: Entry file (optional)
+      description: If one entry misbehaves, paste the `.md` file with personal text replaced. The frontmatter is usually what matters.
+      render: markdown
+  - type: textarea
+    id: log
+    attributes:
+      label: Output of `journal reindex --full` or the terminal, if any
+      render: shell

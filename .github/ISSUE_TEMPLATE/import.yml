@@ -1,0 +1,29 @@
+name: Day One import problem
+description: An export did not import the way you expected
+labels: [import]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Journal version and Day One version
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What the import reported
+      description: The line like "imported 1200 of 1201 entries (…)" or the error.
+    validations:
+      required: true
+  - type: textarea
+    id: layout
+    attributes:
+      label: Export layout
+      description: Run `unzip -l Export.zip | head -20` and paste it. File names only, no content.
+      render: shell
+  - type: textarea
+    id: sample
+    attributes:
+      label: One entry from the JSON that went wrong (optional)
+      description: Replace personal text; keep the field names.
+      render: json
