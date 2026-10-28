@@ -1,0 +1,16 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.sjh9714/journal",
+  "description": "Personal journal kept as Markdown files: search, On This Day, append to today, Day One import.",
+  "repository": { "url": "https://github.com/sjh9714/journal", "source": "github" },
+  "version": "0.1.0",
+  "websiteUrl": "https://github.com/sjh9714/journal",
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/sjh9714/journal/releases/download/v0.1.0/journal-0.1.0.mcpb",
+      "fileSha256": "6cd9e177f6d90f4daa8ce7f46cdb1d5530fcad2a086863d7ba7385117a0b07a5",
+      "transport": { "type": "stdio" }
+    }
+  ]
+}

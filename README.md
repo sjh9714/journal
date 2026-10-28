@@ -29,8 +29,8 @@ signed and notarized.
 CLI (also the MCP server):
 
 ```sh
-cargo install --path crates/journal-cli
-journal init                       # creates ~/Journal
+brew install --cask sjh9714/tap/journal   # macOS; or grab a binary from Releases
+journal init                       # creates ~/Journal (or follows the desktop app's folder)
 journal add "First entry" -t life
 journal list
 journal search first
@@ -42,6 +42,8 @@ journal on-this-day
 ```sh
 claude mcp add journal -- journal mcp serve
 ```
+
+Claude Desktop: download `journal-0.1.0.mcpb` from Releases and open it.
 
 Then: "add a line to today's journal about the deploy", "what did I write
 about the move last year?", "summarise my week". `--read-only` if you only

@@ -25,8 +25,10 @@ Developer ID certificate:
 ```sh
 # once: store notarization credentials in the keychain (never in the repo)
 xcrun notarytool store-credentials journal --apple-id <email> --team-id <TEAMID> --password <app-specific-password>
-# per release: build both targets, sign, notarize, staple, upload to the draft
+# per release: DMGs + CLI binaries signed and notarized, .mcpb bundle, Homebrew tap
 scripts/release-macos.sh v0.1.0
+# then bump the version and fileSha256 in server.json and publish to the MCP registry
+mcp-publisher publish
 ```
 
 To sign and notarize in CI instead, add these repository secrets
