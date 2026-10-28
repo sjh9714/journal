@@ -202,6 +202,14 @@ pub fn system_timezone() -> String {
     "UTC".to_string()
 }
 
+/// Today's calendar date in the journal's timezone (`TZ`, then the system
+/// zone, then UTC). Use this instead of `chrono::Local`, which ignores `TZ`
+/// on Windows and would disagree with the zone new entries are stamped with.
+pub fn today() -> NaiveDate {
+    let tz = parse_tz(&system_timezone()).unwrap_or(chrono_tz::UTC);
+    now_in(&tz).date_naive()
+}
+
 /// Current time expressed in the given zone as a fixed-offset datetime.
 pub fn now_in(tz: &Tz) -> DateTime<FixedOffset> {
     let now = Utc::now().with_timezone(tz);

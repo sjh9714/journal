@@ -1,9 +1,9 @@
 //! MCP server over stdio. Every tool is a thin call into `journal_core::Store`.
 
 use anyhow::{anyhow, Result};
-use chrono::{Local, NaiveDate};
+use chrono::NaiveDate;
 use journal_core::store::EntryPatch;
-use journal_core::{Entry, EntrySummary, ListFilter, NewEntry, Store};
+use journal_core::{today, Entry, EntrySummary, ListFilter, NewEntry, Store};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::model::{ErrorData, Implementation, ServerCapabilities, ServerConfig};
@@ -184,7 +184,7 @@ fn bad(e: impl std::fmt::Display) -> ErrorData {
 }
 fn parse_date(s: Option<String>) -> Result<NaiveDate, ErrorData> {
     match s {
-        None => Ok(Local::now().date_naive()),
+        None => Ok(today()),
         Some(s) => NaiveDate::parse_from_str(&s, "%Y-%m-%d").map_err(bad),
     }
 }
@@ -284,7 +284,7 @@ impl JournalServer {
         self.guard_write()?;
         let p = p.0;
         let journal = p.journal.unwrap_or_else(|| "default".into());
-        let today = Local::now().date_naive();
+        let today = today();
         let mut store = self.lock();
         let existing = store
             .on_date(today)

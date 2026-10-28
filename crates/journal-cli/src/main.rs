@@ -4,7 +4,7 @@ use anyhow::{bail, Context, Result};
 use chrono::{Local, NaiveDate};
 use clap::{Args, Parser, Subcommand};
 use journal_core::store::EntryPatch;
-use journal_core::{import_dayone, EntrySummary, ImportOptions, ListFilter, NewEntry, Store};
+use journal_core::{import_dayone, today, EntrySummary, ImportOptions, ListFilter, NewEntry, Store};
 use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 
@@ -261,11 +261,11 @@ fn main() -> Result<()> {
             print_summaries(&store.search(&q, limit)?, cli.json)?;
         }
         Cmd::Today { date } => {
-            let d = date.unwrap_or_else(|| Local::now().date_naive());
+            let d = date.unwrap_or_else(today);
             print_summaries(&store.on_date(d)?, cli.json)?;
         }
         Cmd::OnThisDay { date } => {
-            let d = date.unwrap_or_else(|| Local::now().date_naive());
+            let d = date.unwrap_or_else(today);
             let rows = store.on_this_day(d)?;
             if rows.is_empty() && !cli.json {
                 println!("nothing on {} in other years", d.format("%m-%d"));
@@ -330,7 +330,7 @@ fn main() -> Result<()> {
             }
         }
         Cmd::Stats => {
-            let s = store.stats(Local::now().date_naive())?;
+            let s = store.stats(today())?;
             if cli.json {
                 println!("{}", serde_json::to_string_pretty(&s)?);
             } else {
