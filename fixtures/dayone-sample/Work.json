@@ -1,0 +1,16 @@
+{
+ "metadata": {
+  "version": "1.0"
+ },
+ "entries": [
+  {
+   "uuid": "12345678123456781234567812345678",
+   "creationDate": "2026-03-03T00:00:00Z",
+   "timeZone": "UTC",
+   "text": "Standup notes\n\n- shipped importer\n",
+   "tags": [
+    "work"
+   ]
+  }
+ ]
+}

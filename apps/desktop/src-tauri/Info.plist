@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>Journal records where you were when you start an entry. Turn this off in Settings → New entries.</string>
+  <key>NSLocationUsageDescription</key>
+  <string>Journal records where you were when you start an entry. Turn this off in Settings → New entries.</string>
+</dict>
+</plist>

@@ -1,0 +1,23 @@
+[package]
+name = "journal-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Core library for journal: Markdown-file journal with SQLite index"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_norway.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
+uuid.workspace = true
+rusqlite.workspace = true
+walkdir.workspace = true
+sha2.workspace = true
+dirs.workspace = true
+zip.workspace = true
+tempfile.workspace = true
+
