@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { Entry, EntrySummary, Status } from "./types";
+import type { Entry, EntrySummary, Problem, Status } from "./types";
 import { Sidebar, type View } from "./components/Sidebar";
 import { EntryEditor } from "./components/EntryEditor";
 import { OnThisDay } from "./components/OnThisDay";
@@ -26,6 +26,7 @@ export default function App() {
   const [otd, setOtd] = useState<EntrySummary[]>([]);
   const [journals, setJournals] = useState<[string, number][]>([]);
   const [tags, setTags] = useState<[string, number][]>([]);
+  const [problems, setProblems] = useState<Problem[]>([]);
   const [query, setQuery] = useState("");
   const [journal, setJournal] = useState<string | null>(null);
   const [tag, setTag] = useState<string | null>(null);
@@ -48,10 +49,11 @@ export default function App() {
   }, [query, journal, tag, starredOnly]);
 
   const refreshMeta = useCallback(async () => {
-    const [j, t, o] = await Promise.all([api.journals(), api.tags(), api.onThisDay(todayISO())]);
+    const [j, t, o, pr] = await Promise.all([api.journals(), api.tags(), api.onThisDay(todayISO()), api.problems()]);
     setJournals(j);
     setTags(t);
     setOtd(o);
+    setProblems(pr);
   }, []);
 
   useEffect(() => { api.status().then(setStatus); }, []);
@@ -66,7 +68,7 @@ export default function App() {
       busy = true;
       try {
         const s = await api.reindex(false);
-        if (s.added || s.updated || s.removed) {
+        if (s.added || s.updated || s.removed || s.skipped) {
           await refreshList();
           await refreshMeta();
         }
@@ -162,10 +164,11 @@ export default function App() {
         onView={setView}
         onNew={() => newEntry()}
         searchRef={searchRef}
+        problemCount={problems.length}
       />
       <main className="main">
         {view === "settings" && (
-          <Settings status={status} theme={theme} onTheme={setTheme} onStatus={setStatus} onImported={() => { refreshList(); refreshMeta(); }} />
+          <Settings status={status} theme={theme} onTheme={setTheme} onStatus={setStatus} onImported={() => { refreshList(); refreshMeta(); }} problems={problems} onReindexed={refreshMeta} />
         )}
         {view === "calendar" && <CalendarView onOpen={openEntry} onNewOn={(d) => newEntry(d)} />}
         {view === "timeline" && selected && (

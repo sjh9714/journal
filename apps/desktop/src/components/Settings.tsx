@@ -2,17 +2,19 @@ import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { api, IN_TAURI } from "../api";
-import type { ImportReport, Status } from "../types";
+import type { ImportReport, Problem, Status } from "../types";
 import { captureEnabled, setCaptureEnabled } from "../lib/enrich";
 
 export type Theme = "system" | "light" | "dark";
 
-export function Settings({ status, theme, onTheme, onStatus, onImported }: {
+export function Settings({ status, theme, onTheme, onStatus, onImported, problems, onReindexed }: {
   status: Status;
   theme: Theme;
   onTheme: (t: Theme) => void;
   onStatus: (s: Status) => void;
   onImported: () => void;
+  problems: Problem[];
+  onReindexed: () => void;
 }) {
   const [capture, setCapture] = useState(captureEnabled());
   const [report, setReport] = useState<ImportReport | null>(null);
@@ -48,6 +50,10 @@ export function Settings({ status, theme, onTheme, onStatus, onImported }: {
     const s = await api.reindex(true);
     setMsg(`Rebuilt index: ${s.added} entries, ${s.skipped} skipped`);
     onStatus(await api.status());
+    onReindexed();
+  };
+  const reveal = (rel: string) => {
+    if (IN_TAURI && status.root) revealItemInDir(`${status.root}/${rel}`);
   };
   const mcpCmd = "claude mcp add journal -- journal mcp serve";
 
@@ -65,6 +71,20 @@ export function Settings({ status, theme, onTheme, onStatus, onImported }: {
           <button onClick={() => changeRoot(true)}>Create new journal…</button>
           <button onClick={reindex}>Rebuild search index</button>
         </div>
+        {problems.length > 0 && (
+          <div className="problems">
+            <p className="problem-title">{problems.length === 1 ? "1 file could not be read" : `${problems.length} files could not be read`}. They are left untouched and are not searchable until fixed. Sync conflicts usually look like “… (conflicted copy).md”.</p>
+            <ul>
+              {problems.map((pr) => (
+                <li key={pr.path}>
+                  <span className="mono">{pr.path}</span>
+                  <span className="dim"> · {pr.reason}</span>
+                  {IN_TAURI && <button className="link" onClick={() => reveal(pr.path)}>Show file</button>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <section>

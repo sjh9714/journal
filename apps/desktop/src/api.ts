@@ -1,5 +1,5 @@
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
-import type { Entry, EntryPatch, EntrySummary, Filter, ImportReport, NewEntry, ReindexStats, Status } from "./types";
+import type { Entry, EntryPatch, EntrySummary, Filter, ImportReport, NewEntry, Problem, ReindexStats, Status } from "./types";
 
 export const IN_TAURI = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -33,6 +33,7 @@ export const api = {
   tags: () => invoke<[string, number][]>("list_tags"),
   journals: () => invoke<[string, number][]>("list_journals"),
   reindex: (full: boolean) => invoke<ReindexStats>("reindex", { full }),
+  problems: () => invoke<Problem[]>("list_problems"),
   attachFile: (path: string) => invoke<{ rel: string; link: string }>("attach_file", { path }),
   importDayOne: (path: string, journal?: string) => invoke<ImportReport>("import_dayone_export", { path, journal: journal ?? null }),
   entryAbsPath: (id: string) => invoke<string>("entry_abs_path", { id }),

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { CalendarDays, List, Plus, Search, Settings, Star } from "lucide-react";
+import { AlertTriangle, CalendarDays, List, Plus, Search, Settings, Star } from "lucide-react";
 import type { EntrySummary } from "../types";
 import { monthKey, monthLabel, timeLabel } from "../lib/dates";
 
@@ -23,6 +23,8 @@ interface Props {
   onView: (v: View) => void;
   onNew: () => void;
   searchRef: React.RefObject<HTMLInputElement | null>;
+  /** Files the indexer could not parse; shown as a chip that opens Settings. */
+  problemCount: number;
 }
 
 export function Sidebar(p: Props) {
@@ -108,6 +110,12 @@ export function Sidebar(p: Props) {
           </section>
         ))}
       </div>
+      {p.problemCount > 0 && (
+        <button className="problem-chip" onClick={() => p.onView("settings")} title="Some files could not be read. Click for details.">
+          <AlertTriangle size={13} />
+          {p.problemCount === 1 ? "1 file skipped" : `${p.problemCount} files skipped`}
+        </button>
+      )}
     </aside>
   );
 }

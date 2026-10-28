@@ -165,3 +165,13 @@ pre.mono { background: var(--bg); padding: 10px 12px; border-radius: 8px; user-s
 /* crash screen */
 .crash { padding: 48px 56px; color: var(--ink); }
 .crash pre { white-space: pre-wrap; font-family: var(--mono); font-size: 12px; background: var(--bg); padding: 12px; border-radius: 8px; max-width: 800px; }
+
+/* skipped files */
+.problem-chip { margin: 0 12px 12px; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 5px 10px; border-radius: 999px; background: #fff3cd; color: #7a5a00; }
+:root[data-theme="dark"] .problem-chip { background: #4a3a10; color: #f5d78a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .problem-chip { background: #4a3a10; color: #f5d78a; } }
+.problems { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--bg); font-size: 13px; }
+.problems .problem-title { margin: 0 0 6px; }
+.problems ul { margin: 0; padding-left: 18px; }
+.problems li { margin: 4px 0; }
+.problems .link { margin-left: 8px; }

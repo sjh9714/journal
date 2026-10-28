@@ -80,3 +80,7 @@ export interface ReindexStats {
   unchanged: number;
   skipped: number;
 }
+export interface Problem {
+  path: string;
+  reason: string;
+}

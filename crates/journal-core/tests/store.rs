@@ -154,6 +154,16 @@ fn broken_file_is_skipped_not_fatal() {
     let stats = store.reindex(true).unwrap();
     assert_eq!(stats.added, 1);
     assert_eq!(stats.skipped, 1);
+    let problems = store.problems();
+    assert_eq!(problems.len(), 1);
+    assert_eq!(problems[0].path, "entries/broken.md");
+    assert!(problems[0].reason.contains("missing opening ---"), "{}", problems[0].reason);
+    // Still reported on an incremental pass, cleared once the file is fixed.
+    store.reindex(false).unwrap();
+    assert_eq!(store.problems().len(), 1);
+    std::fs::remove_file(store.root().join("entries/broken.md")).unwrap();
+    store.reindex(false).unwrap();
+    assert!(store.problems().is_empty());
     assert_eq!(store.count(&ListFilter::default()).unwrap(), 1);
 }
 

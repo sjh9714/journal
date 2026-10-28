@@ -58,6 +58,17 @@ or:
 journal import dayone ~/Downloads/Export.zip
 ```
 
+## On your phone
+
+There is no mobile app yet. Because entries are plain Markdown files, keep
+the journal folder in iCloud Drive (or Dropbox, Syncthing) and open it with
+any Markdown editor on the phone. On iPhone, [Obsidian](https://obsidian.md)
+(free) works well: create a vault, choose "Existing folder", pick the journal
+folder in iCloud Drive, and new entries follow the format in
+[`docs/format.md`](docs/format.md). iA Writer and 1Writer also open the
+folder directly. The desktop app picks the edits up the next time it is
+focused.
+
 ## Build from source
 
 ```sh

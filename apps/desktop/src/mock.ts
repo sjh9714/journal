@@ -121,6 +121,8 @@ export const mockInvoke = async (cmd: string, args: Record<string, unknown> = {}
       for (const e of entries.values()) m.set(e.journal, (m.get(e.journal) ?? 0) + 1);
       return [...m.entries()].sort();
     }
+    case "list_problems":
+      return [{ path: "entries/2026/2026-03-03-conflict (Dropbox).md", reason: "missing closing ---" }];
     case "reindex":
       return { added: 0, updated: 0, removed: 0, unchanged: entries.size, skipped: 0 };
     case "attach_file":

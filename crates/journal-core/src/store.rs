@@ -21,6 +21,16 @@ pub const MARKER_DIR: &str = ".journal";
 pub struct Store {
     root: PathBuf,
     index: Index,
+    /// Files under entries/ the last reindex could not parse. Shown to the
+    /// user so a sync conflict or a hand edit never goes unnoticed.
+    problems: Vec<Problem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Problem {
+    /// Path relative to the journal root.
+    pub path: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -77,7 +87,7 @@ impl Store {
         }
         let root = root.canonicalize()?;
         let index = Index::open(&Self::index_path(&root))?;
-        let mut store = Self { root, index };
+        let mut store = Self { root, index, problems: Vec::new() };
         store.reindex(false)?;
         Ok(store)
     }
@@ -89,7 +99,7 @@ impl Store {
             return Err(Error::RootMissing(root));
         }
         let index = Index::open_in_memory()?;
-        let mut store = Self { root, index };
+        let mut store = Self { root, index, problems: Vec::new() };
         store.reindex(true)?;
         Ok(store)
     }
@@ -108,6 +118,11 @@ impl Store {
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Files skipped by the last reindex, with the parse error.
+    pub fn problems(&self) -> &[Problem] {
+        &self.problems
     }
 
     // ----- write -----
@@ -262,6 +277,7 @@ impl Store {
         let known = self.index.known_files()?;
         let mut seen: HashMap<String, ()> = HashMap::new();
         let mut stats = ReindexStats::default();
+        let mut problems = Vec::new();
         let entries_dir = self.root.join(ENTRIES_DIR);
         for item in WalkDir::new(&entries_dir).into_iter().filter_map(|e| e.ok()) {
             if !item.file_type().is_file() || item.path().extension().and_then(|e| e.to_str()) != Some("md") {
@@ -274,6 +290,10 @@ impl Store {
             let is_new = match known.get(&key) {
                 Some((_, m)) if *m == mtime => {
                     stats.unchanged += 1;
+                    // Still broken since last time: keep reporting it.
+                    if let Some(p) = self.problems.iter().find(|p| p.path == key) {
+                        problems.push(p.clone());
+                    }
                     continue;
                 }
                 Some(_) => false,
@@ -292,6 +312,11 @@ impl Store {
                     // A broken file must not take the whole index down.
                     eprintln!("journal: skipping {}: {e}", rel.display());
                     stats.skipped += 1;
+                    let reason = match &e {
+                        Error::Frontmatter { msg, .. } => msg.clone(),
+                        other => other.to_string(),
+                    };
+                    problems.push(Problem { path: key.clone(), reason });
                 }
             }
         }
@@ -301,6 +326,8 @@ impl Store {
                 stats.removed += 1;
             }
         }
+        problems.sort_by(|a, b| a.path.cmp(&b.path));
+        self.problems = problems;
         Ok(stats)
     }
 

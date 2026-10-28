@@ -3,7 +3,7 @@
 
 use chrono::NaiveDate;
 use journal_core::store::{EntryPatch, ReindexStats};
-use journal_core::{import_dayone, Entry, EntrySummary, ImportOptions, ImportReport, ListFilter, NewEntry, Store};
+use journal_core::{import_dayone, Entry, EntrySummary, ImportOptions, ImportReport, ListFilter, NewEntry, Problem, Store};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -181,6 +181,11 @@ fn reindex(state: State<AppState>, full: bool) -> CmdResult<ReindexStats> {
 }
 
 #[tauri::command]
+fn list_problems(state: State<AppState>) -> CmdResult<Vec<Problem>> {
+    with_store(&state, |s| Ok(s.problems().to_vec()))
+}
+
+#[tauri::command]
 fn attach_file(state: State<AppState>, path: String) -> CmdResult<Attached> {
     with_store(&state, |s| {
         let rel = s.attach(Path::new(&path))?;
@@ -291,6 +296,7 @@ pub fn run() {
             list_tags,
             list_journals,
             reindex,
+            list_problems,
             attach_file,
             import_dayone_export,
             entry_abs_path,

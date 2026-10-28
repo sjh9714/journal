@@ -276,6 +276,9 @@ fn main() -> Result<()> {
         Cmd::Reindex { full } => {
             let s = store.reindex(full)?;
             println!("added {} updated {} removed {} unchanged {} skipped {}", s.added, s.updated, s.removed, s.unchanged, s.skipped);
+            for p in store.problems() {
+                println!("  skipped {}: {}", p.path, p.reason);
+            }
         }
         Cmd::Import(ImportCmd::Dayone { path, journal, dry_run }) => {
             let r = import_dayone(&mut store, &path, &ImportOptions { journal, dry_run })?;
