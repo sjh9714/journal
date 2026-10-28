@@ -10,10 +10,27 @@ Artifacts: macOS `.dmg` (Apple Silicon and Intel), Windows `.msi`/`.exe`,
 Linux `.AppImage`/`.deb`, plus a standalone `journal` CLI per platform.
 Review the draft on GitHub, then publish.
 
+Re-run for an existing tag without re-tagging:
+
+```sh
+gh workflow run Release -f tag=v0.1.0
+```
+
 ## macOS signing and notarization
 
-Unsigned builds open only after right-click → Open. To sign and notarize in
-CI, add these repository secrets (Settings → Secrets → Actions, or `gh secret set`):
+CI publishes macOS bundles only when signing secrets are present; otherwise
+the macOS jobs are skipped and the DMGs come from a Mac that has the
+Developer ID certificate:
+
+```sh
+# once: store notarization credentials in the keychain (never in the repo)
+xcrun notarytool store-credentials journal --apple-id <email> --team-id <TEAMID> --password <app-specific-password>
+# per release: build both targets, sign, notarize, staple, upload to the draft
+scripts/release-macos.sh v0.1.0
+```
+
+To sign and notarize in CI instead, add these repository secrets
+(Settings → Secrets → Actions, or `gh secret set`):
 
 | secret | value |
 |---|---|

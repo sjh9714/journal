@@ -2,6 +2,11 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build (e.g. v0.1.0)
+        required: true
 jobs:
   desktop:
     permissions:
@@ -21,6 +26,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -56,7 +63,10 @@ jobs:
             } >> "$GITHUB_ENV"
             echo "signing: on"
           else
-            echo "signing: off (no APPLE_CERTIFICATE secret)"
+            # Unsigned macOS bundles are not published; scripts/release-macos.sh
+            # uploads signed ones from a Mac with the certificate instead.
+            echo "MAC_UNSIGNED=1" >> "$GITHUB_ENV"
+            echo "signing: off (no APPLE_CERTIFICATE secret); macOS bundles skipped"
           fi
           if [ -n "$AID" ] && [ -n "$APW" ] && [ -n "$TEAM" ]; then
             {
@@ -67,12 +77,13 @@ jobs:
             echo "notarization: on"
           fi
       - uses: tauri-apps/tauri-action@v0
+        if: env.MAC_UNSIGNED != '1'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: Journal ${{ github.ref_name }}
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: Journal ${{ inputs.tag || github.ref_name }}
           releaseDraft: true
           args: ${{ matrix.args }}
   cli:
@@ -90,6 +101,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -105,5 +118,6 @@ jobs:
           fi
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           draft: true
           files: out/*
