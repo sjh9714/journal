@@ -23,9 +23,8 @@ like Day One and an MCP server so your agent can read and write it.
 ## Install
 
 Desktop app: download the build for macOS, Windows or Linux from
-[Releases](https://github.com/sjh9714/journal/releases). The macOS build is
-signed with a Developer ID; until it is notarized, open it the first time with
-right-click → Open.
+[Releases](https://github.com/sjh9714/journal/releases). The macOS builds are
+signed and notarized.
 
 CLI (also the MCP server):
 
