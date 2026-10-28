@@ -1,9 +1,18 @@
 // In-memory stand-in used when the UI runs in a plain browser (vite dev)
 // instead of inside Tauri. Lets the interface be developed and screenshotted
 // without the native shell. Never used in the packaged app.
-import type { Entry, EntryPatch, EntrySummary, Filter, NewEntry, Status } from "./types";
+import type { Entry, EntryPatch, EntrySummary, Filter, NewEntry, Status, Template, TrashedEntry } from "./types";
 
 const entries = new Map<string, Entry>();
+const trash = new Map<string, { e: Entry; at: string }>();
+let lock: { pass: string; idle: number } | null = null;
+let reminder = { enabled: false, time: "21:00" };
+let fails = 0;
+const templates: Template[] = [
+  { slug: "daily", name: "Daily", tags: [], journal: null, body: "# {{weekday}}\n\n**Morning**\n\n\n**Afternoon**\n\n\n**Evening**\n\n" },
+  { slug: "gratitude", name: "Gratitude", tags: ["gratitude"], journal: null, body: "# {{weekday}}, {{date}}\n\nThree things I am grateful for today:\n\n1. \n2. \n3. \n" },
+  { slug: "weekly-review", name: "Weekly review", tags: ["review"], journal: null, body: "# Week of {{date}}\n\n## What went well\n\n- \n" },
+];
 let root: string | null = "/Users/demo/Journal";
 
 function uuid() {
@@ -19,7 +28,7 @@ function titleOf(body: string) {
       l = alt;
     }
     if (/^[-*_ ]+$/.test(l)) continue;
-    l = l.replace(/^[#>\-*+ ]+/, "").replace(/^[\d.)]+\s*/, "").replace(/^[*_`]+|[*_`]+$/g, "").trim();
+    l = l.replace(/^[#>\-*+ ]+/, "").replace(/^\d+[.)] /, "").replace(/^[*_`]+|[*_`]+$/g, "").trim();
     if (l) return l;
   }
   return "";
@@ -99,8 +108,73 @@ export const mockInvoke = async (cmd: string, args: Record<string, unknown> = {}
     case "delete_entry": {
       const e = (await mockInvoke("get_entry", { id: args.id })) as Entry;
       entries.delete(e.uuid);
+      trash.set(e.uuid, { e, at: new Date().toISOString() });
       return e;
     }
+    case "trash_list":
+      return [...trash.values()].map(({ e, at }): TrashedEntry => ({ uuid: e.uuid, title: titleOf(e.body), created: e.created, deleted_at: at, trash_path: `.journal/trash/x__${e.path.split("/").pop()}`, journal: e.journal })).sort((a, b) => (a.deleted_at < b.deleted_at ? 1 : -1));
+    case "restore_entry": {
+      const id = args.id as string;
+      const hit = [...trash.values()].find((t) => t.e.uuid.startsWith(id));
+      if (!hit) throw new Error(`entry not found: ${id}`);
+      trash.delete(hit.e.uuid);
+      entries.set(hit.e.uuid, hit.e);
+      return hit.e;
+    }
+    case "empty_trash": {
+      const n = trash.size;
+      trash.clear();
+      return n;
+    }
+    case "list_templates":
+      return templates;
+    case "create_from_template": {
+      const t = templates.find((x) => x.slug === args.slug);
+      if (!t) throw new Error("template not found");
+      const now = new Date();
+      const body = t.body.replace(/{{date}}/g, now.toISOString().slice(0, 10)).replace(/{{weekday}}/g, now.toLocaleDateString("en-US", { weekday: "long" })).replace(/{{time}}/g, now.toTimeString().slice(0, 5)).replace(/{{year}}/g, String(now.getFullYear()));
+      const n = args.entry as NewEntry;
+      return mockInvoke("create_entry", { entry: { ...n, body, tags: n.tags?.length ? n.tags : t.tags, journal: n.journal ?? t.journal ?? undefined } });
+    }
+    case "get_stats": {
+      const dates = [...new Set([...entries.values()].map((e) => e.created.slice(0, 10)))].sort().reverse();
+      const today = args.today as string;
+      let streak = 0;
+      if (dates[0] === today || dates[0] === new Date(Date.now() - 86400000).toISOString().slice(0, 10)) {
+        streak = 1;
+        for (let i = 1; i < dates.length; i++) {
+          if ((new Date(dates[i - 1]).getTime() - new Date(dates[i]).getTime()) / 86400000 === 1) streak++;
+          else break;
+        }
+      }
+      return { total: entries.size, this_month: dates.filter((d) => d.startsWith(today.slice(0, 7))).length, this_year: dates.filter((d) => d.startsWith(today.slice(0, 4))).length, streak_days: streak, longest_streak: Math.max(streak, 2), words: [...entries.values()].reduce((n, e) => n + e.body.split(/\s+/).filter(Boolean).length, 0), first_entry: dates[dates.length - 1], last_entry: dates[0] };
+    }
+    case "lock_info":
+      return { enabled: !!lock, idle_minutes: lock?.idle ?? 5 };
+    case "set_passcode": {
+      if (lock && lock.pass !== args.current) throw new Error("current passcode is wrong");
+      if (String(args.new).length < 4) throw new Error("passcode must be at least 4 characters");
+      lock = { pass: args.new as string, idle: args.idleMinutes as number };
+      return { enabled: true, idle_minutes: lock.idle };
+    }
+    case "set_lock_idle":
+      if (lock) lock.idle = args.idleMinutes as number;
+      return { enabled: !!lock, idle_minutes: lock?.idle ?? 5 };
+    case "clear_passcode":
+      if (lock && lock.pass !== args.current) throw new Error("current passcode is wrong");
+      lock = null;
+      return { enabled: false, idle_minutes: 5 };
+    case "verify_passcode": {
+      if (!lock || lock.pass === args.pass) { fails = 0; return { ok: true, retry_after: 0 }; }
+      fails++;
+      if (fails >= 5) { fails = 0; return { ok: false, retry_after: 30 }; }
+      return { ok: false, retry_after: 0 };
+    }
+    case "get_reminder":
+      return reminder;
+    case "set_reminder":
+      reminder = { enabled: args.enabled as boolean, time: args.time as string };
+      return reminder;
     case "search_entries": {
       const q = (args.query as string).toLowerCase().split(/\s+/).filter(Boolean).map((w) => w.replace(/\*$/, ""));
       return [...entries.values()].filter((e) => q.every((w) => (e.body + " " + e.tags.join(" ")).toLowerCase().includes(w))).map(summary);

@@ -1,6 +1,6 @@
-import { useMemo } from "react";
-import { AlertTriangle, CalendarDays, List, Plus, Search, Settings, Star } from "lucide-react";
-import type { EntrySummary } from "../types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, CalendarDays, ChevronDown, List, Plus, Search, Settings, Star } from "lucide-react";
+import type { EntrySummary, Template } from "../types";
 import { monthKey, monthLabel, timeLabel } from "../lib/dates";
 
 export type View = "timeline" | "calendar" | "settings";
@@ -21,13 +21,22 @@ interface Props {
   onTag: (t: string | null) => void;
   onStarred: (s: boolean) => void;
   onView: (v: View) => void;
-  onNew: () => void;
+  onNew: (template?: string) => void;
+  templates: Template[];
   searchRef: React.RefObject<HTMLInputElement | null>;
   /** Files the indexer could not parse; shown as a chip that opens Settings. */
   problemCount: number;
 }
 
 export function Sidebar(p: Props) {
+  const [menu, setMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenu(false); };
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [menu]);
   const groups = useMemo(() => {
     const m = new Map<string, EntrySummary[]>();
     for (const e of p.entries) {
@@ -45,9 +54,25 @@ export function Sidebar(p: Props) {
           <Search size={14} />
           <input ref={p.searchRef} placeholder="Search  ⌘K" value={p.query} onChange={(e) => p.onQuery(e.target.value)} />
         </div>
-        <button className="icon-btn" title="New entry  ⌘N" onClick={p.onNew}>
-          <Plus size={18} />
-        </button>
+        <div className="new-wrap" ref={menuRef}>
+          <button className="icon-btn" title="New entry  ⌘N" onClick={() => p.onNew()}>
+            <Plus size={18} />
+          </button>
+          {p.templates.length > 0 && (
+            <button className="icon-btn tiny" title="New from template" onClick={() => setMenu((m) => !m)}>
+              <ChevronDown size={14} />
+            </button>
+          )}
+          {menu && (
+            <div className="menu">
+              <button onClick={() => { setMenu(false); p.onNew(); }}>Blank entry</button>
+              <div className="menu-sep" />
+              {p.templates.map((t) => (
+                <button key={t.slug} onClick={() => { setMenu(false); p.onNew(t.slug); }}>{t.name}</button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="viewbar">

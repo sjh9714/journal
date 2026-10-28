@@ -1,5 +1,5 @@
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
-import type { Entry, EntryPatch, EntrySummary, Filter, ImportReport, NewEntry, Problem, ReindexStats, Status } from "./types";
+import type { Entry, EntryPatch, EntrySummary, Filter, ImportReport, LockInfo, NewEntry, Problem, ReindexStats, ReminderConfig, Stats, Status, Template, TrashedEntry, VerifyResult } from "./types";
 
 export const IN_TAURI = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -37,4 +37,17 @@ export const api = {
   attachFile: (path: string) => invoke<{ rel: string; link: string }>("attach_file", { path }),
   importDayOne: (path: string, journal?: string) => invoke<ImportReport>("import_dayone_export", { path, journal: journal ?? null }),
   entryAbsPath: (id: string) => invoke<string>("entry_abs_path", { id }),
+  trashList: () => invoke<TrashedEntry[]>("trash_list"),
+  restore: (id: string) => entry(invoke<Entry>("restore_entry", { id })),
+  emptyTrash: () => invoke<number>("empty_trash"),
+  templates: () => invoke<Template[]>("list_templates"),
+  createFromTemplate: (slug: string, e: NewEntry) => entry(invoke<Entry>("create_from_template", { slug, entry: e })),
+  stats: (today: string) => invoke<Stats>("get_stats", { today }),
+  lockInfo: () => invoke<LockInfo>("lock_info"),
+  setPasscode: (current: string | null, next: string, idleMinutes: number) => invoke<LockInfo>("set_passcode", { current, new: next, idleMinutes }),
+  setLockIdle: (idleMinutes: number) => invoke<LockInfo>("set_lock_idle", { idleMinutes }),
+  clearPasscode: (current: string) => invoke<LockInfo>("clear_passcode", { current }),
+  verifyPasscode: (pass: string) => invoke<VerifyResult>("verify_passcode", { pass }),
+  getReminder: () => invoke<ReminderConfig>("get_reminder"),
+  setReminder: (enabled: boolean, time: string) => invoke<ReminderConfig>("set_reminder", { enabled, time }),
 };

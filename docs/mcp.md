@@ -23,6 +23,6 @@ unique prefix.
 | `create_entry` | `body`, `journal?`, `tags?`, `starred?`, `created?` (RFC 3339), `location?`, `weather?` | full entry |
 | `append_to_today` | `text`, `journal?` | appends a paragraph to today's entry in that journal, creating it if needed |
 | `update_entry` | `id`, `body?`, `tags?`, `starred?`, `journal?` | full entry |
-| `delete_entry` | `id` | summary of the removed entry |
+| `delete_entry` | `id` | moves the entry to the trash (30-day retention); returns its summary |
 
 Write tools return an `invalid_request` error in read-only mode.

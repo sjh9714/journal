@@ -5,11 +5,15 @@ A journal is a folder. Nothing in it needs this app to be read.
 ```
 Journal/
   .journal/journal.toml        marker; safe to sync
+  .journal/trash/              deleted entries, `<unix-secs>__<file>.md`, purged after 30 days
   entries/
     2026/
       2026-10-28-6d65312f.md   one entry per file
   attachments/
     <sha256>.png               content-addressed; referenced from entries
+  templates/
+    gratitude.md               frontmatter `name`, optional `tags`/`journal`; body may use
+                               {{date}} {{weekday}} {{time}} {{year}}
 ```
 
 The search index (SQLite, FTS5) lives **outside** the folder, under the OS

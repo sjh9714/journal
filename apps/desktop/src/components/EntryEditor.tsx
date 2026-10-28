@@ -5,7 +5,7 @@ import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Markdown } from "@tiptap/markdown";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { ask, open } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Cloud, FolderOpen, ImagePlus, MapPin, Star, Trash2 } from "lucide-react";
 import { api, IN_TAURI } from "../api";
@@ -102,11 +102,7 @@ export function EntryEditor({ entry, reloadKey, journals, onChanged, onDeleted }
     else if (typeof f === "string") insertFiles([f]);
   };
   const remove = async () => {
-    // window.confirm is unreliable inside the WKWebView shell; use the native dialog there.
-    const ok = IN_TAURI
-      ? await ask("The Markdown file will be removed. This cannot be undone.", { title: "Delete this entry?", kind: "warning", okLabel: "Delete", cancelLabel: "Keep" })
-      : confirm("Delete this entry? The Markdown file will be removed.");
-    if (!ok) return;
+    // Soft delete: the file moves to the trash and the app offers Undo.
     await api.remove(entry.uuid);
     onDeleted(entry.uuid);
   };
@@ -148,7 +144,7 @@ export function EntryEditor({ entry, reloadKey, journals, onChanged, onDeleted }
           <button className={entry.starred ? "icon-btn on" : "icon-btn"} title="Star" onClick={() => patch({ starred: !entry.starred })}><Star size={16} /></button>
           {IN_TAURI && <button className="icon-btn" title="Add image" onClick={addImage}><ImagePlus size={16} /></button>}
           {IN_TAURI && <button className="icon-btn" title="Show file" onClick={reveal}><FolderOpen size={16} /></button>}
-          <button className="icon-btn danger" title="Delete" onClick={remove}><Trash2 size={16} /></button>
+          <button className="icon-btn danger" title="Move to Trash" onClick={remove}><Trash2 size={16} /></button>
         </div>
       </header>
       <div className="entry-body">

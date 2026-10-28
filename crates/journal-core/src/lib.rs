@@ -14,9 +14,15 @@ pub mod entry;
 pub mod error;
 pub mod frontmatter;
 pub mod index;
+pub mod stats;
 pub mod store;
+pub mod template;
+pub mod trash;
 
 pub use dayone::{import_dayone, ImportOptions, ImportReport};
 pub use entry::{Entry, EntrySummary, Location, NewEntry, Weather};
 pub use error::{Error, Result};
+pub use stats::Stats;
 pub use store::{ListFilter, Problem, Store};
+pub use template::Template;
+pub use trash::TrashedEntry;

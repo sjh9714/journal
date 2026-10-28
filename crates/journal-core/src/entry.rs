@@ -140,10 +140,14 @@ pub fn title_of(body: &str) -> String {
         if l.chars().all(|c| matches!(c, '-' | '*' | '_' | ' ')) {
             continue; // horizontal rule
         }
-        let l = l
-            .trim_start_matches(['#', '>', '-', '*', '+', ' '])
-            .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')')
-            .trim();
+        let l = l.trim_start_matches(['#', '>', '-', '*', '+', ' ']);
+        // Ordered-list marker ("1. " / "12) ") only; never bare numbers like a date.
+        let digits = l.chars().take_while(|c| c.is_ascii_digit()).count();
+        let l = match l[digits..].chars().next() {
+            Some('.' | ')') if digits > 0 && l[digits + 1..].starts_with(' ') => &l[digits + 2..],
+            _ => l,
+        };
+        let l = l.trim();
         let l = l.trim_matches(['*', '_', '`']);
         if !l.is_empty() {
             return l.to_string();
@@ -163,6 +167,9 @@ mod tests {
         assert_eq!(title_of("![Beach day](x.png)"), "Beach day");
         assert_eq!(title_of("![](x.png)"), "");
         assert_eq!(title_of("- first item\n- second"), "first item");
+        assert_eq!(title_of("1. first step"), "first step");
+        assert_eq!(title_of("# 2026-10-29 감사한 것"), "2026-10-29 감사한 것");
+        assert_eq!(title_of("2026 was a year"), "2026 was a year");
         assert_eq!(title_of("> quoted"), "quoted");
         assert_eq!(title_of("**bold start** rest"), "bold start** rest");
         assert_eq!(title_of("---\n\nreal"), "real");

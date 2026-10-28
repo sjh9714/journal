@@ -52,8 +52,20 @@ enum Cmd {
     Append { id: String, text: Vec<String> },
     /// Edit metadata of an entry.
     Edit(EditArgs),
-    /// Delete an entry file.
-    Delete { id: String },
+    /// Move an entry to the trash (restorable for 30 days).
+    Delete {
+        id: String,
+        /// Skip the trash and remove the file now.
+        #[arg(long)]
+        permanent: bool,
+    },
+    /// Trashed entries: list, restore, empty.
+    #[command(subcommand)]
+    Trash(TrashCmd),
+    /// List templates (files in templates/).
+    Templates,
+    /// Streak, counts and words.
+    Stats,
     /// List tags with counts.
     Tags,
     /// List journals with counts.
@@ -84,6 +96,16 @@ enum McpCmd {
 }
 
 #[derive(Subcommand)]
+enum TrashCmd {
+    /// Show what is in the trash.
+    List,
+    /// Put an entry back (uuid or prefix).
+    Restore { id: String },
+    /// Permanently delete everything in the trash.
+    Empty,
+}
+
+#[derive(Subcommand)]
 enum ImportCmd {
     /// Import a Day One JSON export (.zip or extracted folder).
     Dayone {
@@ -109,6 +131,9 @@ struct AddArgs {
     at: Option<String>,
     #[arg(long)]
     starred: bool,
+    /// Start from a template (see `journal templates`).
+    #[arg(long)]
+    template: Option<String>,
 }
 
 #[derive(Args)]
@@ -176,12 +201,16 @@ fn main() -> Result<()> {
     match cli.cmd {
         Cmd::Init => unreachable!(),
         Cmd::Add(a) => {
-            let body = text_or_stdin(a.text)?;
-            if body.trim().is_empty() {
+            let body = if a.template.is_some() && a.text.is_empty() && std::io::stdin().is_terminal() { String::new() } else { text_or_stdin(a.text)? };
+            if body.trim().is_empty() && a.template.is_none() {
                 bail!("nothing to add");
             }
             let created = a.at.as_deref().map(chrono::DateTime::parse_from_rfc3339).transpose()?;
-            let e = store.create(NewEntry { body, created, tags: a.tag, journal: a.journal, starred: a.starred, ..Default::default() })?;
+            let new = NewEntry { body, created, tags: a.tag, journal: a.journal, starred: a.starred, ..Default::default() };
+            let e = match a.template {
+                Some(t) => store.create_from_template(&t, new)?,
+                None => store.create(new)?,
+            };
             if cli.json {
                 println!("{}", serde_json::to_string_pretty(&e)?);
             } else {
@@ -259,9 +288,59 @@ fn main() -> Result<()> {
             let e = store.update(&a.id, EntryPatch { tags: a.tag, journal: a.journal, starred, ..Default::default() })?;
             println!("{}  updated", short(&e.meta.uuid));
         }
-        Cmd::Delete { id } => {
-            let e = store.delete(&id)?;
-            println!("{}  deleted {}", short(&e.meta.uuid), e.path.display());
+        Cmd::Delete { id, permanent } => {
+            if permanent {
+                let e = store.delete_permanent(&id)?;
+                println!("{}  deleted permanently {}", short(&e.meta.uuid), e.path.display());
+            } else {
+                let e = store.delete(&id)?;
+                println!("{}  moved to trash (journal trash restore {} to undo)", short(&e.meta.uuid), short(&e.meta.uuid));
+            }
+        }
+        Cmd::Trash(TrashCmd::List) => {
+            let rows = store.trash_list()?;
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&rows)?);
+            } else if rows.is_empty() {
+                println!("trash is empty");
+            } else {
+                for t in rows {
+                    println!("{}  deleted {}  written {}  {}", short(&t.uuid), t.deleted_at.with_timezone(&Local).format("%Y-%m-%d"), t.created.format("%Y-%m-%d"), if t.title.is_empty() { "(untitled)".to_string() } else { t.title });
+                }
+            }
+        }
+        Cmd::Trash(TrashCmd::Restore { id }) => {
+            let e = store.restore(&id)?;
+            println!("{}  restored to {}", short(&e.meta.uuid), e.path.display());
+        }
+        Cmd::Trash(TrashCmd::Empty) => {
+            println!("removed {} files", store.empty_trash()?);
+        }
+        Cmd::Templates => {
+            for t in store.templates()? {
+                let extra = [
+                    (!t.tags.is_empty()).then(|| format!("tags: {}", t.tags.join(", "))),
+                    t.journal.as_ref().map(|j| format!("journal: {j}")),
+                ]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join("  ");
+                println!("{:<16} {}{}", t.slug, t.name, if extra.is_empty() { String::new() } else { format!("  ({extra})") });
+            }
+        }
+        Cmd::Stats => {
+            let s = store.stats(Local::now().date_naive())?;
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&s)?);
+            } else {
+                println!("entries: {}  this month: {}  this year: {}", s.total, s.this_month, s.this_year);
+                println!("streak: {} days  (longest {})", s.streak_days, s.longest_streak);
+                println!("words: {}", s.words);
+                if let (Some(f), Some(l)) = (s.first_entry, s.last_entry) {
+                    println!("from {f} to {l}");
+                }
+            }
         }
         Cmd::Tags => {
             for (t, n) in store.tags()? {

@@ -3,7 +3,11 @@
 
 use chrono::NaiveDate;
 use journal_core::store::{EntryPatch, ReindexStats};
-use journal_core::{import_dayone, Entry, EntrySummary, ImportOptions, ImportReport, ListFilter, NewEntry, Problem, Store};
+use journal_core::{import_dayone, Entry, EntrySummary, ImportOptions, ImportReport, ListFilter, NewEntry, Problem, Stats, Store, Template, TrashedEntry};
+use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use rand_core::OsRng;
+use argon2::Argon2;
+use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -12,12 +16,49 @@ use tauri::{AppHandle, Manager, State};
 struct AppState {
     store: Mutex<Option<Store>>,
     config_path: PathBuf,
+    /// Failed passcode attempts and the moment the lockout ends.
+    attempts: Mutex<(u32, Option<Instant>)>,
 }
 
 #[derive(Serialize, Deserialize, Default, Clone)]
 struct Config {
     root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    lock: Option<LockConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reminder: Option<ReminderConfig>,
 }
+
+#[derive(Serialize, Deserialize, Clone)]
+struct LockConfig {
+    /// argon2id PHC string. The passcode itself is never stored.
+    hash: String,
+    /// 0 = only on launch.
+    idle_minutes: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+struct ReminderConfig {
+    enabled: bool,
+    /// "21:00"
+    time: String,
+}
+
+#[derive(Serialize)]
+struct LockInfo {
+    enabled: bool,
+    idle_minutes: u32,
+}
+
+#[derive(Serialize)]
+struct VerifyResult {
+    ok: bool,
+    /// Seconds until another attempt is allowed, when locked out.
+    retry_after: u64,
+}
+
+const MAX_ATTEMPTS: u32 = 5;
+const LOCKOUT: Duration = Duration::from_secs(30);
 
 #[derive(Serialize)]
 struct Status {
@@ -73,6 +114,13 @@ fn default_root() -> PathBuf {
     dirs::home_dir().map(|h| h.join("Journal")).unwrap_or_else(|| PathBuf::from("Journal"))
 }
 
+fn update_config(path: &Path, f: impl FnOnce(&mut Config)) -> CmdResult<Config> {
+    let mut cfg = load_config(path);
+    f(&mut cfg);
+    save_config(path, &cfg)?;
+    Ok(cfg)
+}
+
 fn load_config(path: &Path) -> Config {
     std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
@@ -121,7 +169,7 @@ fn open_root(state: State<AppState>, path: String, create: bool) -> CmdResult<St
     let store = if create { Store::init(&p) } else { Store::open(&p) }.map_err(err)?;
     let root = store.root().to_string_lossy().into_owned();
     *state.store.lock().unwrap_or_else(|p| p.into_inner()) = Some(store);
-    save_config(&state.config_path, &Config { root: Some(root) })?;
+    update_config(&state.config_path, |c| c.root = Some(root))?;
     Ok(status_of(&state))
 }
 
@@ -178,6 +226,139 @@ fn list_journals(state: State<AppState>) -> CmdResult<Vec<(String, usize)>> {
 #[tauri::command]
 fn reindex(state: State<AppState>, full: bool) -> CmdResult<ReindexStats> {
     with_store(&state, |s| s.reindex(full))
+}
+
+// ----- trash / templates / stats -----
+
+#[tauri::command]
+fn trash_list(state: State<AppState>) -> CmdResult<Vec<TrashedEntry>> {
+    with_store(&state, |s| s.trash_list())
+}
+
+#[tauri::command]
+fn restore_entry(state: State<AppState>, id: String) -> CmdResult<Entry> {
+    with_store(&state, |s| s.restore(&id))
+}
+
+#[tauri::command]
+fn empty_trash(state: State<AppState>) -> CmdResult<usize> {
+    with_store(&state, |s| s.empty_trash())
+}
+
+#[tauri::command]
+fn list_templates(state: State<AppState>) -> CmdResult<Vec<Template>> {
+    with_store(&state, |s| s.templates())
+}
+
+#[tauri::command]
+fn create_from_template(state: State<AppState>, slug: String, entry: NewEntry) -> CmdResult<Entry> {
+    with_store(&state, |s| s.create_from_template(&slug, entry))
+}
+
+#[tauri::command]
+fn get_stats(state: State<AppState>, today: NaiveDate) -> CmdResult<Stats> {
+    with_store(&state, |s| s.stats(today))
+}
+
+// ----- lock -----
+
+#[tauri::command]
+fn lock_info(state: State<AppState>) -> LockInfo {
+    match load_config(&state.config_path).lock {
+        Some(l) => LockInfo { enabled: true, idle_minutes: l.idle_minutes },
+        None => LockInfo { enabled: false, idle_minutes: 5 },
+    }
+}
+
+fn hash_passcode(pass: &str) -> CmdResult<String> {
+    let salt = SaltString::generate(&mut OsRng);
+    Ok(Argon2::default().hash_password(pass.as_bytes(), &salt).map_err(err)?.to_string())
+}
+
+fn check(hash: &str, pass: &str) -> bool {
+    PasswordHash::new(hash).map(|h| Argon2::default().verify_password(pass.as_bytes(), &h).is_ok()).unwrap_or(false)
+}
+
+/// Set or change the passcode. `current` is required when one already exists.
+#[tauri::command]
+fn set_passcode(state: State<AppState>, current: Option<String>, new: String, idle_minutes: u32) -> CmdResult<LockInfo> {
+    if new.chars().count() < 4 {
+        return Err("passcode must be at least 4 characters".into());
+    }
+    let cfg = load_config(&state.config_path);
+    if let Some(l) = &cfg.lock {
+        if !current.as_deref().map(|c| check(&l.hash, c)).unwrap_or(false) {
+            return Err("current passcode is wrong".into());
+        }
+    }
+    let hash = hash_passcode(&new)?;
+    update_config(&state.config_path, |c| c.lock = Some(LockConfig { hash, idle_minutes }))?;
+    Ok(LockInfo { enabled: true, idle_minutes })
+}
+
+#[tauri::command]
+fn set_lock_idle(state: State<AppState>, idle_minutes: u32) -> CmdResult<LockInfo> {
+    let cfg = update_config(&state.config_path, |c| {
+        if let Some(l) = c.lock.as_mut() {
+            l.idle_minutes = idle_minutes;
+        }
+    })?;
+    Ok(LockInfo { enabled: cfg.lock.is_some(), idle_minutes })
+}
+
+#[tauri::command]
+fn clear_passcode(state: State<AppState>, current: String) -> CmdResult<LockInfo> {
+    let cfg = load_config(&state.config_path);
+    match &cfg.lock {
+        Some(l) if check(&l.hash, &current) => {
+            update_config(&state.config_path, |c| c.lock = None)?;
+            Ok(LockInfo { enabled: false, idle_minutes: 5 })
+        }
+        Some(_) => Err("current passcode is wrong".into()),
+        None => Ok(LockInfo { enabled: false, idle_minutes: 5 }),
+    }
+}
+
+#[tauri::command]
+fn verify_passcode(state: State<AppState>, pass: String) -> CmdResult<VerifyResult> {
+    let mut att = state.attempts.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(until) = att.1 {
+        let now = Instant::now();
+        if now < until {
+            return Ok(VerifyResult { ok: false, retry_after: (until - now).as_secs().max(1) });
+        }
+        *att = (0, None);
+    }
+    let Some(l) = load_config(&state.config_path).lock else {
+        return Ok(VerifyResult { ok: true, retry_after: 0 });
+    };
+    if check(&l.hash, &pass) {
+        *att = (0, None);
+        Ok(VerifyResult { ok: true, retry_after: 0 })
+    } else {
+        att.0 += 1;
+        if att.0 >= MAX_ATTEMPTS {
+            att.1 = Some(Instant::now() + LOCKOUT);
+            att.0 = 0;
+            return Ok(VerifyResult { ok: false, retry_after: LOCKOUT.as_secs() });
+        }
+        Ok(VerifyResult { ok: false, retry_after: 0 })
+    }
+}
+
+// ----- reminder -----
+
+#[tauri::command]
+fn get_reminder(state: State<AppState>) -> ReminderConfig {
+    load_config(&state.config_path).reminder.unwrap_or(ReminderConfig { enabled: false, time: "21:00".into() })
+}
+
+#[tauri::command]
+fn set_reminder(state: State<AppState>, enabled: bool, time: String) -> CmdResult<ReminderConfig> {
+    let r = ReminderConfig { enabled, time };
+    let saved = r.clone();
+    update_config(&state.config_path, |c| c.reminder = Some(r))?;
+    Ok(saved)
 }
 
 #[tauri::command]
@@ -271,13 +452,18 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            let config_path = app.path().app_config_dir()?.join("config.json");
+            // JOURNAL_CONFIG points at an alternative config.json (tests, QA).
+            let config_path = match std::env::var_os("JOURNAL_CONFIG") {
+                Some(p) => PathBuf::from(p),
+                None => app.path().app_config_dir()?.join("config.json"),
+            };
             let cfg = load_config(&config_path);
             // JOURNAL_ROOT overrides the saved folder without touching the config (testing, scripts).
             let root = std::env::var("JOURNAL_ROOT").ok().or(cfg.root);
             let store = root.as_deref().and_then(|r| Store::open(r).ok());
-            app.manage(AppState { store: Mutex::new(store), config_path });
+            app.manage(AppState { store: Mutex::new(store), config_path, attempts: Mutex::new((0, None)) });
             Ok(())
         })
         .register_uri_scheme_protocol("journal", |ctx, request| serve_attachment(ctx.app_handle(), request.uri().path()))
@@ -297,6 +483,19 @@ pub fn run() {
             list_journals,
             reindex,
             list_problems,
+            trash_list,
+            restore_entry,
+            empty_trash,
+            list_templates,
+            create_from_template,
+            get_stats,
+            lock_info,
+            set_passcode,
+            set_lock_idle,
+            clear_passcode,
+            verify_passcode,
+            get_reminder,
+            set_reminder,
             attach_file,
             import_dayone_export,
             entry_abs_path,

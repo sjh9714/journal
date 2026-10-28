@@ -309,7 +309,7 @@ impl JournalServer {
         Ok(Json(e.into()))
     }
 
-    #[tool(description = "Delete an entry file permanently. Returns the deleted entry.")]
+    #[tool(description = "Move an entry to the trash (restorable for 30 days from the app or `journal trash restore`). Returns the removed entry.")]
     async fn delete_entry(&self, p: Parameters<DeleteParams>) -> Result<Json<EntryOut>, ErrorData> {
         self.guard_write()?;
         let e = self.lock().delete(&p.0.id).map_err(bad)?;

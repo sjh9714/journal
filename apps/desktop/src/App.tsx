@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { Entry, EntrySummary, Problem, Status } from "./types";
+import type { Entry, EntrySummary, Problem, Stats, Status, Template } from "./types";
+import { LockScreen } from "./components/LockScreen";
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { IN_TAURI } from "./api";
+import { report } from "./lib/log";
 import { Sidebar, type View } from "./components/Sidebar";
 import { EntryEditor } from "./components/EntryEditor";
 import { OnThisDay } from "./components/OnThisDay";
@@ -27,6 +31,11 @@ export default function App() {
   const [journals, setJournals] = useState<[string, number][]>([]);
   const [tags, setTags] = useState<[string, number][]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [locked, setLocked] = useState<boolean | null>(null); // null = not yet known
+  const [idleMinutes, setIdleMinutes] = useState(5);
+  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
   const [query, setQuery] = useState("");
   const [journal, setJournal] = useState<string | null>(null);
   const [tag, setTag] = useState<string | null>(null);
@@ -49,14 +58,69 @@ export default function App() {
   }, [query, journal, tag, starredOnly]);
 
   const refreshMeta = useCallback(async () => {
-    const [j, t, o, pr] = await Promise.all([api.journals(), api.tags(), api.onThisDay(todayISO()), api.problems()]);
+    const [j, t, o, pr, st, tp] = await Promise.all([api.journals(), api.tags(), api.onThisDay(todayISO()), api.problems(), api.stats(todayISO()), api.templates()]);
     setJournals(j);
     setTags(t);
     setOtd(o);
     setProblems(pr);
+    setStats(st);
+    setTemplates(tp);
   }, []);
 
   useEffect(() => { api.status().then(setStatus); }, []);
+
+  // Lock: locked on launch when a passcode exists, and again after idle.
+  const refreshLock = useCallback(async () => {
+    const li = await api.lockInfo();
+    setIdleMinutes(li.idle_minutes);
+    return li;
+  }, []);
+  useEffect(() => {
+    refreshLock().then((li) => setLocked(li.enabled));
+  }, [refreshLock]);
+  useEffect(() => {
+    if (locked !== false || idleMinutes <= 0) return;
+    let last = Date.now();
+    const bump = () => { last = Date.now(); };
+    const events = ["mousemove", "keydown", "mousedown", "wheel", "touchstart"] as const;
+    events.forEach((ev) => window.addEventListener(ev, bump, { passive: true }));
+    const t = window.setInterval(async () => {
+      if (Date.now() - last < idleMinutes * 60_000) return;
+      const li = await api.lockInfo();
+      if (li.enabled) setLocked(true);
+    }, 15_000);
+    return () => { events.forEach((ev) => window.removeEventListener(ev, bump)); window.clearInterval(t); };
+  }, [locked, idleMinutes]);
+
+  // Reminder: once a minute, if enabled and no entry today at the set time.
+  useEffect(() => {
+    if (!status?.root) return;
+    let firedFor = "";
+    const tick = async () => {
+      const r = await api.getReminder();
+      if (!r.enabled) return;
+      const now = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      const key = `${todayISO()} ${r.time}`;
+      if (hhmm !== r.time || firedFor === key) return;
+      firedFor = key;
+      const rows = await api.onDate(todayISO());
+      if (rows.length > 0) return;
+      if (!IN_TAURI) { console.info("reminder would fire"); return; }
+      let ok = await isPermissionGranted();
+      if (!ok) ok = (await requestPermission()) === "granted";
+      report("warn", `reminder ${r.time}: permission=${ok}`);
+      if (ok) sendNotification({ title: "Journal", body: "No entry yet today. A line is enough." });
+    };
+    const t = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(t);
+  }, [status?.root]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 8000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
 
   // Pick up files written by the CLI, an agent over MCP, or a sync tool:
   // incremental reindex on window focus and every 30s.
@@ -99,9 +163,10 @@ export default function App() {
     else if (import.meta.env.VITE_OPEN_FIRST && entries[0]) openEntry(entries[0].uuid);
   }, [status?.root, entries, openEntry]);
 
-  const newEntry = useCallback(async (date?: string) => {
+  const newEntry = useCallback(async (date?: string, template?: string) => {
     const created = date ? `${date}T12:00:00${localRfc3339().slice(19)}` : undefined;
-    const e = await api.create({ body: "", journal: journal ?? undefined, created });
+    const draft = { body: "", journal: journal ?? undefined, created };
+    const e = template ? await api.createFromTemplate(template, draft) : await api.create(draft);
     setSelected(e);
     setView("timeline");
     await refreshList();
@@ -124,6 +189,16 @@ export default function App() {
     setSelected((cur) => (cur?.uuid === id ? null : cur));
     await refreshList();
     refreshMeta();
+    setToast({
+      text: "Moved to Trash. Restorable for 30 days in Settings.",
+      undo: async () => {
+        const e = await api.restore(id);
+        setToast(null);
+        setSelected(e);
+        await refreshList();
+        refreshMeta();
+      },
+    });
   }, [refreshList, refreshMeta]);
 
   useEffect(() => {
@@ -139,7 +214,8 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [newEntry, openEntry]);
 
-  if (!status) return <div className="loading" />;
+  if (!status || locked === null) return <div className="loading" />;
+  if (locked) return <LockScreen onUnlock={() => setLocked(false)} />;
   if (!status.root) return <Onboarding status={status} onReady={setStatus} />;
 
   const showOtd = selected && selected.created.slice(0, 10) === todayISO();
@@ -162,13 +238,25 @@ export default function App() {
         onTag={setTag}
         onStarred={setStarredOnly}
         onView={setView}
-        onNew={() => newEntry()}
+        onNew={(template) => newEntry(undefined, template)}
+        templates={templates}
         searchRef={searchRef}
         problemCount={problems.length}
       />
       <main className="main">
         {view === "settings" && (
-          <Settings status={status} theme={theme} onTheme={setTheme} onStatus={setStatus} onImported={() => { refreshList(); refreshMeta(); }} problems={problems} onReindexed={refreshMeta} />
+          <Settings
+            status={status}
+            theme={theme}
+            onTheme={setTheme}
+            onStatus={setStatus}
+            onImported={() => { refreshList(); refreshMeta(); }}
+            problems={problems}
+            onReindexed={refreshMeta}
+            onRestored={async (e) => { setSelected(e); setView("timeline"); await refreshList(); refreshMeta(); }}
+            onLockChanged={refreshLock}
+            onLockNow={() => setLocked(true)}
+          />
         )}
         {view === "calendar" && <CalendarView onOpen={openEntry} onNewOn={(d) => newEntry(d)} />}
         {view === "timeline" && selected && (
@@ -184,10 +272,22 @@ export default function App() {
               <h2>{greeting()}</h2>
               <p>Pick an entry on the left, or press <kbd>⌘N</kbd> to start today's.</p>
               <button className="primary" onClick={() => newEntry()}>New entry</button>
+              {stats && stats.total > 0 && (
+                <p className="stats-line">
+                  {stats.streak_days > 0 ? `${stats.streak_days}-day streak` : "No entry yet today"}
+                  {" · "}{stats.this_month} this month · {stats.total} entries · {stats.words.toLocaleString()} words
+                </p>
+              )}
             </div>
           </div>
         )}
       </main>
+      {toast && (
+        <div className="toast">
+          <span>{toast.text}</span>
+          {toast.undo && <button className="link" onClick={toast.undo}>Undo</button>}
+        </div>
+      )}
     </div>
   );
 }
@@ -202,7 +302,7 @@ function titleOf(body: string) {
       l = alt;
     }
     if (/^[-*_ ]+$/.test(l)) continue;
-    l = l.replace(/^[#>\-*+ ]+/, "").replace(/^[\d.)]+\s*/, "").replace(/^[*_`]+|[*_`]+$/g, "").trim();
+    l = l.replace(/^[#>\-*+ ]+/, "").replace(/^\d+[.)] /, "").replace(/^[*_`]+|[*_`]+$/g, "").trim();
     if (l) return l;
   }
   return "";

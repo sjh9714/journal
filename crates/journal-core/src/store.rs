@@ -76,7 +76,9 @@ impl Store {
         if !marker.exists() {
             std::fs::write(&marker, "# journal folder marker. Safe to sync.\nformat = 1\n")?;
         }
-        Self::open(root)
+        let store = Self::open(root)?;
+        store.ensure_default_templates()?;
+        Ok(store)
     }
 
     /// Open an existing journal folder. Runs an incremental reindex.
@@ -89,6 +91,7 @@ impl Store {
         let index = Index::open(&Self::index_path(&root))?;
         let mut store = Self { root, index, problems: Vec::new() };
         store.reindex(false)?;
+        let _ = store.purge_trash(crate::trash::RETENTION_DAYS);
         Ok(store)
     }
 
@@ -125,6 +128,14 @@ impl Store {
         &self.problems
     }
 
+    pub(crate) fn index_mut(&mut self) -> &mut Index {
+        &mut self.index
+    }
+
+    pub(crate) fn index_ref(&self) -> &Index {
+        &self.index
+    }
+
     // ----- write -----
 
     pub fn create(&mut self, new: NewEntry) -> Result<Entry> {
@@ -150,6 +161,26 @@ impl Store {
         let entry = Entry { meta, body: normalize_body(new.body), path };
         self.write_entry(&entry)?;
         Ok(entry)
+    }
+
+    /// Create an entry from a template. Variables are rendered with the entry's
+    /// own creation time; template tags/journal apply unless `new` sets them.
+    pub fn create_from_template(&mut self, slug: &str, mut new: NewEntry) -> Result<Entry> {
+        let t = self.template(slug)?;
+        let timezone = new.timezone.clone().unwrap_or_else(system_timezone);
+        let tz = parse_tz(&timezone)?;
+        let created = new.created.unwrap_or_else(|| now_in(&tz));
+        let rendered = crate::template::render(&t.body, created);
+        new.body = if new.body.trim().is_empty() { rendered } else { format!("{rendered}\n{}", new.body) };
+        if new.tags.is_empty() {
+            new.tags = t.tags.clone();
+        }
+        if new.journal.is_none() {
+            new.journal = t.journal.clone();
+        }
+        new.created = Some(created);
+        new.timezone = Some(timezone);
+        self.create(new)
     }
 
     pub fn update(&mut self, id: &str, patch: EntryPatch) -> Result<Entry> {
@@ -186,11 +217,9 @@ impl Store {
         self.update(&entry.meta.uuid, EntryPatch { body: Some(body), ..Default::default() })
     }
 
+    /// Soft delete: moves the file to the trash (see `trash.rs`).
     pub fn delete(&mut self, id: &str) -> Result<Entry> {
-        let entry = self.get(id)?;
-        std::fs::remove_file(self.root.join(&entry.path))?;
-        self.index.remove(&entry.meta.uuid)?;
-        Ok(entry)
+        self.trash(id)
     }
 
     /// Copy a file into attachments/ (content-addressed) and return the

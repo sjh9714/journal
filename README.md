@@ -12,7 +12,9 @@ like Day One and an MCP server so your agent can read and write it.
   photos, tags, location, weather and stars come across. Re-importing never
   duplicates.
 - **On This Day**, full-text search (FTS5, works for Korean/Japanese/CJK),
-  tags, multiple journals, calendar view, dark mode.
+  tags, multiple journals, calendar view, dark mode, streak and word counts.
+- **Templates** (`templates/*.md`, three included), a **daily reminder**,
+  a **passcode lock**, and a **trash** that keeps deleted entries for 30 days.
 - **Agents.** `journal mcp serve` exposes 11 tools over MCP; the CLI does
   the same from a shell. See [`docs/mcp.md`](docs/mcp.md).
 - **No account, no server, no telemetry.** Optional location/weather uses the
@@ -35,6 +37,9 @@ journal add "First entry" -t life
 journal list
 journal search first
 journal on-this-day
+journal add --template gratitude   # see `journal templates`
+journal delete <id>                # to the trash; `journal trash restore <id>` undoes it
+journal stats
 ```
 
 ## Let your agent in
@@ -78,8 +83,9 @@ cd apps/desktop && npm install && npm run tauri build
 
 ## Status
 
-1.0 scope: desktop app (macOS, Windows, Linux), CLI, MCP, Day One import.
-Not yet: mobile, built-in sync service, PDF export, encryption at rest.
+Desktop app (macOS, Windows, Linux), CLI, MCP, Day One import, templates,
+reminder, lock, trash. Not yet: mobile, built-in sync service, PDF export,
+encryption at rest, edit history (keep the folder in git for that).
 
 MIT. "Day One" is a trademark of Automattic; this project only reads its
 export format.

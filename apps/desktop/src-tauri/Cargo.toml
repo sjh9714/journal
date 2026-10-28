@@ -21,6 +21,9 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+argon2 = { version = "0.5", features = ["std"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
 journal-core = { path = "../../../crates/journal-core" }
 serde.workspace = true
 serde_json.workspace = true

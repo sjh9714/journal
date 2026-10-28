@@ -11,6 +11,10 @@ pub struct Index {
     conn: Connection,
 }
 
+/// Bump when derived columns (title, words, …) change meaning; the index is
+/// then rebuilt from the files on next open.
+const INDEX_VERSION: i64 = 2;
+
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS entries (
     uuid        TEXT PRIMARY KEY,
@@ -26,7 +30,8 @@ CREATE TABLE IF NOT EXISTS entries (
     starred     INTEGER NOT NULL DEFAULT 0,
     tags        TEXT NOT NULL DEFAULT '[]',
     title       TEXT NOT NULL DEFAULT '',
-    mtime       INTEGER NOT NULL
+    mtime       INTEGER NOT NULL,
+    words       INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_entries_created ON entries(created_utc DESC);
 CREATE INDEX IF NOT EXISTS idx_entries_md ON entries(month, day);
@@ -71,6 +76,13 @@ impl Index {
 
     fn with_conn(conn: Connection) -> Result<Self> {
         conn.execute_batch(SCHEMA)?;
+        // Older indexes predate the words column; adding it is idempotent enough.
+        let _ = conn.execute_batch("ALTER TABLE entries ADD COLUMN words INTEGER NOT NULL DEFAULT 0");
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if version != INDEX_VERSION {
+            conn.execute_batch("DELETE FROM entries; DELETE FROM entry_tags; DELETE FROM entries_fts;")?;
+            conn.execute_batch(&format!("PRAGMA user_version = {INDEX_VERSION}"))?;
+        }
         Ok(Self { conn })
     }
 
@@ -80,13 +92,13 @@ impl Index {
         let date = entry.local_date();
         let tags_json = serde_json::to_string(&m.tags)?;
         tx.execute(
-            "INSERT INTO entries (uuid, path, created, created_utc, date, year, month, day, timezone, journal, starred, tags, title, mtime)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            "INSERT INTO entries (uuid, path, created, created_utc, date, year, month, day, timezone, journal, starred, tags, title, mtime, words)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
              ON CONFLICT(uuid) DO UPDATE SET
                path=excluded.path, created=excluded.created, created_utc=excluded.created_utc,
                date=excluded.date, year=excluded.year, month=excluded.month, day=excluded.day,
                timezone=excluded.timezone, journal=excluded.journal, starred=excluded.starred,
-               tags=excluded.tags, title=excluded.title, mtime=excluded.mtime",
+               tags=excluded.tags, title=excluded.title, mtime=excluded.mtime, words=excluded.words",
             params![
                 m.uuid,
                 rel(&entry.path),
@@ -102,6 +114,7 @@ impl Index {
                 tags_json,
                 entry.title(),
                 mtime,
+                crate::stats::count_words(&entry.body) as i64,
             ],
         )?;
         tx.execute("DELETE FROM entry_tags WHERE uuid = ?1", params![m.uuid])?;
@@ -250,6 +263,30 @@ impl Index {
             .prepare("SELECT journal, COUNT(*) FROM entries GROUP BY journal ORDER BY journal")?;
         let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as usize)))?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
+    }
+
+    /// Distinct local dates (newest first), total words, total entries.
+    pub fn dates_and_words(&self) -> Result<(Vec<NaiveDate>, usize, usize)> {
+        let mut stmt = self.conn.prepare("SELECT DISTINCT date FROM entries ORDER BY date DESC")?;
+        let dates: Vec<NaiveDate> = stmt
+            .query_map([], |r| r.get::<_, String>(0))?
+            .filter_map(|r| r.ok())
+            .filter_map(|d| NaiveDate::parse_from_str(&d, "%Y-%m-%d").ok())
+            .collect();
+        let (words, total): (i64, i64) = self
+            .conn
+            .query_row("SELECT COALESCE(SUM(words), 0), COUNT(*) FROM entries", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok((dates, words as usize, total as usize))
+    }
+
+    /// Entries whose local date starts with `prefix` (YYYY or YYYY-MM).
+    pub fn count_prefix(&self, prefix: &str) -> Result<usize> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM entries WHERE date LIKE ?1 || '%'",
+            params![prefix],
+            |r| r.get(0),
+        )?;
+        Ok(n as usize)
     }
 
     /// path -> (uuid, mtime) for every indexed entry.

@@ -84,3 +84,40 @@ export interface Problem {
   path: string;
   reason: string;
 }
+export interface Template {
+  slug: string;
+  name: string;
+  tags: string[];
+  journal?: string | null;
+  body: string;
+}
+export interface TrashedEntry {
+  uuid: string;
+  title: string;
+  created: string;
+  deleted_at: string;
+  trash_path: string;
+  journal: string;
+}
+export interface Stats {
+  total: number;
+  this_month: number;
+  this_year: number;
+  streak_days: number;
+  longest_streak: number;
+  words: number;
+  first_entry?: string | null;
+  last_entry?: string | null;
+}
+export interface LockInfo {
+  enabled: boolean;
+  idle_minutes: number;
+}
+export interface VerifyResult {
+  ok: boolean;
+  retry_after: number;
+}
+export interface ReminderConfig {
+  enabled: boolean;
+  time: string;
+}
