@@ -3,6 +3,8 @@
 A journal that is just a folder of Markdown files, with an app that feels
 like Day One and an MCP server so your agent can read and write it.
 
+![Journal demo: timeline, entry with photo, search, calendar, and an agent reading the journal over MCP](docs/demo.gif)
+
 - **Your files.** One `.md` per entry with YAML frontmatter; photos in a
   content-addressed folder. Sync with iCloud Drive, Dropbox, Syncthing, git.
   Open with any editor. See [`docs/format.md`](docs/format.md).
@@ -20,7 +22,10 @@ like Day One and an MCP server so your agent can read and write it.
 
 ## Install
 
-Desktop app: download the build for macOS, Windows or Linux from Releases.
+Desktop app: download the build for macOS, Windows or Linux from
+[Releases](https://github.com/sjh9714/journal/releases). The macOS build is
+signed with a Developer ID; until it is notarized, open it the first time with
+right-click → Open.
 
 CLI (also the MCP server):
 

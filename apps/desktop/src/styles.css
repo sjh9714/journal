@@ -99,9 +99,9 @@ kbd { font-family: var(--mono); font-size: 0.85em; padding: 1px 5px; border: 1px
 .prose .tiptap code { font-family: var(--mono); font-size: 0.9em; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
 .prose .tiptap pre { background: var(--bg); padding: 10px 12px; border-radius: 8px; overflow-x: auto; }
 .prose .tiptap pre code { background: none; padding: 0; }
-.prose .tiptap img { max-width: 100%; width: fit-content; border-radius: 8px; display: block; margin: 0.6em 0; }
-.prose .tiptap img::selection, .prose .tiptap .ProseMirror-selectednode::selection { background: transparent; }
-.prose .tiptap img.ProseMirror-selectednode { outline: 2px solid var(--accent); }
+.prose .tiptap img { max-width: 100%; height: auto; border-radius: 8px; display: inline-block; vertical-align: top; margin: 0.6em 0; }
+.prose .tiptap ::selection { background: rgba(47, 111, 237, 0.28); }
+.prose .tiptap img.ProseMirror-selectednode { outline: 2px solid var(--accent); outline-offset: 2px; }
 .prose .tiptap hr { border: 0; border-top: 1px solid var(--line); margin: 1.2em 0; }
 .prose .tiptap p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--ink-3); float: left; height: 0; pointer-events: none; }
 .entry-foot { padding: 10px 48px 18px; border-top: 1px solid var(--line); }
