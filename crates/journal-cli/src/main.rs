@@ -143,8 +143,21 @@ struct EditArgs {
     unstar: bool,
 }
 
+/// --root, then $JOURNAL_ROOT (clap), then the folder the desktop app uses,
+/// then ~/Journal. Keeps `journal` and the app on the same journal by default.
 fn default_root() -> PathBuf {
+    if let Some(root) = desktop_app_root() {
+        return root;
+    }
     dirs::home_dir().map(|h| h.join("Journal")).unwrap_or_else(|| PathBuf::from("Journal"))
+}
+
+fn desktop_app_root() -> Option<PathBuf> {
+    let cfg = dirs::config_dir()?.join("dev.journal.desktop").join("config.json");
+    let text = std::fs::read_to_string(cfg).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let root = PathBuf::from(v.get("root")?.as_str()?);
+    root.join("entries").is_dir().then_some(root)
 }
 
 fn main() -> Result<()> {
