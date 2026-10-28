@@ -121,12 +121,52 @@ pub struct NewEntry {
     pub uuid: Option<String>,
 }
 
+/// First line that reads as a title: Markdown markers stripped, image-only
+/// and horizontal-rule lines skipped. Empty when nothing qualifies.
 pub fn title_of(body: &str) -> String {
-    body.lines()
-        .map(str::trim)
-        .find(|l| !l.is_empty())
-        .map(|l| l.trim_start_matches('#').trim().to_string())
-        .unwrap_or_default()
+    for raw in body.lines() {
+        let mut l = raw.trim();
+        if l.is_empty() {
+            continue;
+        }
+        // Images: `![alt](src)` -> keep alt text if any, else skip the line.
+        if l.starts_with("![") {
+            let alt = l[2..].split(']').next().unwrap_or("").trim();
+            if alt.is_empty() {
+                continue;
+            }
+            l = alt;
+        }
+        if l.chars().all(|c| matches!(c, '-' | '*' | '_' | ' ')) {
+            continue; // horizontal rule
+        }
+        let l = l
+            .trim_start_matches(|c| matches!(c, '#' | '>' | '-' | '*' | '+' | ' '))
+            .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')')
+            .trim();
+        let l = l.trim_matches(|c| matches!(c, '*' | '_' | '`'));
+        if !l.is_empty() {
+            return l.to_string();
+        }
+    }
+    String::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::title_of;
+
+    #[test]
+    fn titles() {
+        assert_eq!(title_of("# Hello\n\nbody"), "Hello");
+        assert_eq!(title_of("\n\n![](../../attachments/x.png)\n\nAfter the photo"), "After the photo");
+        assert_eq!(title_of("![Beach day](x.png)"), "Beach day");
+        assert_eq!(title_of("![](x.png)"), "");
+        assert_eq!(title_of("- first item\n- second"), "first item");
+        assert_eq!(title_of("> quoted"), "quoted");
+        assert_eq!(title_of("**bold start** rest"), "bold start** rest");
+        assert_eq!(title_of("---\n\nreal"), "real");
+    }
 }
 
 /// Resolve an IANA timezone name, validating it.

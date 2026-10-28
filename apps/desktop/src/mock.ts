@@ -10,8 +10,19 @@ function uuid() {
   return crypto.randomUUID();
 }
 function titleOf(body: string) {
-  const l = body.split("\n").map((s) => s.trim()).find((s) => s.length > 0) ?? "";
-  return l.replace(/^#+\s*/, "");
+  for (const raw of body.split("\n")) {
+    let l = raw.trim();
+    if (!l) continue;
+    if (l.startsWith("![")) {
+      const alt = l.slice(2).split("]")[0].trim();
+      if (!alt) continue;
+      l = alt;
+    }
+    if (/^[-*_ ]+$/.test(l)) continue;
+    l = l.replace(/^[#>\-*+ ]+/, "").replace(/^[\d.)]+\s*/, "").replace(/^[*_`]+|[*_`]+$/g, "").trim();
+    if (l) return l;
+  }
+  return "";
 }
 function summary(e: Entry): EntrySummary {
   return { uuid: e.uuid, created: e.created, date: e.created.slice(0, 10), journal: e.journal, tags: e.tags, starred: e.starred, title: titleOf(e.body), path: e.path };

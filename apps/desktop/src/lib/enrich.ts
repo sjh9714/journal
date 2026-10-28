@@ -57,10 +57,25 @@ async function weatherAt(loc: Location): Promise<Weather | null> {
   }
 }
 
+/** Approximate position from the network connection (city level). Used when the
+ *  OS location service is unavailable, which is the case inside the macOS webview. */
+async function networkLocate(): Promise<Location | null> {
+  try {
+    const r = await fetch("https://ipapi.co/json/", { headers: { Accept: "application/json" } });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { latitude?: number; longitude?: number; city?: string; region?: string };
+    if (typeof j.latitude !== "number" || typeof j.longitude !== "number") return null;
+    const place = [j.city, j.region].filter(Boolean).join(", ");
+    return { latitude: +j.latitude.toFixed(3), longitude: +j.longitude.toFixed(3), place_name: place || null };
+  } catch {
+    return null;
+  }
+}
+
 /** Best effort; resolves to whatever could be captured, never throws. */
 export async function captureContext(): Promise<{ location?: Location; weather?: Weather }> {
   if (!captureEnabled()) return {};
-  const location = await geolocate();
+  const location = (await geolocate()) ?? (await networkLocate());
   if (!location) return {};
   const weather = await weatherAt(location);
   return weather ? { location, weather } : { location };

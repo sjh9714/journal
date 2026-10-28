@@ -14,7 +14,9 @@ like Day One and an MCP server so your agent can read and write it.
 - **Agents.** `journal mcp serve` exposes 11 tools over MCP; the CLI does
   the same from a shell. See [`docs/mcp.md`](docs/mcp.md).
 - **No account, no server, no telemetry.** Optional location/weather uses the
-  OS location service and Open-Meteo (keyless).
+  OS location service when available, otherwise a city-level guess from your
+  network connection (ipapi.co), then Open-Meteo (keyless). One toggle turns
+  it off.
 
 ## Install
 

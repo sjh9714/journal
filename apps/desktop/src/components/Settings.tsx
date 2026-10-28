@@ -82,7 +82,7 @@ export function Settings({ status, theme, onTheme, onStatus, onImported }: {
           <input type="checkbox" checked={capture} onChange={(e) => setCapture(e.target.checked)} />
           Record location and weather when I start an entry
         </label>
-        <p className="dim">Uses the system location service and Open-Meteo (no account, no key). Nothing else leaves this machine.</p>
+        <p className="dim">Uses the system location service when available, otherwise a city-level guess from your network connection (ipapi.co), then Open-Meteo for the weather. No account or key. Nothing else leaves this machine.</p>
       </section>
 
       <section>
