@@ -141,10 +141,10 @@ pub fn title_of(body: &str) -> String {
             continue; // horizontal rule
         }
         let l = l
-            .trim_start_matches(|c| matches!(c, '#' | '>' | '-' | '*' | '+' | ' '))
+            .trim_start_matches(['#', '>', '-', '*', '+', ' '])
             .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')')
             .trim();
-        let l = l.trim_matches(|c| matches!(c, '*' | '_' | '`'));
+        let l = l.trim_matches(['*', '_', '`']);
         if !l.is_empty() {
             return l.to_string();
         }
