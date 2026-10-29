@@ -75,3 +75,15 @@ qa_shot() {
   sips -Z "${QA_SHOT_MAX:-1200}" "$src" --out "$out" >/dev/null
   echo "$out"
 }
+
+# Drag a file from Finder onto the QA window. Orca's drag stays inside one app, so this
+# posts real mouse events, and aborts unless Finder is topmost at the source point and
+# the QA app at the drop point (another window there would receive the drop).
+# Place the windows apart first; coordinates are screen points.
+qa_drop() {  # qa_drop srcX srcY dstX dstY
+  local bin="$QA_DIR/guarded_drag"
+  [[ -x "$bin" ]] || swiftc -O "$(git rev-parse --show-toplevel)/scripts/qa/guarded_drag.swift" -o "$bin" || return 1
+  osascript -e 'tell application "Finder" to activate'; sleep 0.6
+  osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is ${QA_APP#pid:}) to true"; sleep 0.5
+  "$bin" "$1" "$2" "$3" "$4" "${QA_APP#pid:}"
+}

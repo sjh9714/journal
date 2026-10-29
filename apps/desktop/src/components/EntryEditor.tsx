@@ -80,7 +80,9 @@ export function EntryEditor({ entry, reloadKey, journals, onChanged, onDeleted }
     for (const p of paths) {
       if (!/\.(png|jpe?g|gif|webp|heic|svg)$/i.test(p)) continue;
       const a = await api.attachFile(p);
-      editor.chain().focus().setImage({ src: attachmentUrl(a.rel) }).run();
+      // After the selection, not over it: a just-inserted image stays selected
+      // and setImage would replace it with the next one.
+      editor.chain().focus().insertContentAt(editor.state.selection.to, { type: "image", attrs: { src: attachmentUrl(a.rel) } }).run();
     }
   };
 

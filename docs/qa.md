@@ -56,4 +56,6 @@ Input, by target:
   Sleep) hides the banner even when the call succeeds.
 - **Location**: WKWebView geolocation fails silently; the app falls back to
   ipapi.co, so the first entry needs network.
-- **Not yet verified natively**: image drag and drop, Windows and Linux bundles.
+- **Image drag and drop**: `qa_drop` from a Finder window that does not overlap
+  the QA window. Drop twice in a row to check the first image survives.
+- **Not yet verified natively**: Windows and Linux bundles.
