@@ -1,9 +1,10 @@
 # Contributing
 
 ```sh
-cargo test --workspace            # core, importer, MCP over stdio
-cd apps/desktop && npm install && npm run build
-npm run tauri dev                 # native app
+(cd apps/desktop && npm install)
+scripts/check.sh                  # tests, clippy, web build; what CI runs
+git config core.hooksPath .githooks   # run it before every push
+cd apps/desktop && npm run tauri dev  # native app
 npx vite                          # UI only, in a browser, with mock data
 ```
 

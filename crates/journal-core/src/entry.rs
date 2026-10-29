@@ -20,6 +20,8 @@ pub struct Weather {
 }
 
 /// The YAML frontmatter stored at the top of every entry file.
+/// Skipped-when-empty fields also vanish from the desktop JSON; give each one a
+/// default in `normEntry` (apps/desktop/src/api.ts).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Frontmatter {
     pub uuid: String,
@@ -156,26 +158,6 @@ pub fn title_of(body: &str) -> String {
     String::new()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::title_of;
-
-    #[test]
-    fn titles() {
-        assert_eq!(title_of("# Hello\n\nbody"), "Hello");
-        assert_eq!(title_of("\n\n![](../../attachments/x.png)\n\nAfter the photo"), "After the photo");
-        assert_eq!(title_of("![Beach day](x.png)"), "Beach day");
-        assert_eq!(title_of("![](x.png)"), "");
-        assert_eq!(title_of("- first item\n- second"), "first item");
-        assert_eq!(title_of("1. first step"), "first step");
-        assert_eq!(title_of("# 2026-10-29 감사한 것"), "2026-10-29 감사한 것");
-        assert_eq!(title_of("2026 was a year"), "2026 was a year");
-        assert_eq!(title_of("> quoted"), "quoted");
-        assert_eq!(title_of("**bold start** rest"), "bold start** rest");
-        assert_eq!(title_of("---\n\nreal"), "real");
-    }
-}
-
 /// Resolve an IANA timezone name, validating it.
 pub fn parse_tz(name: &str) -> crate::Result<Tz> {
     name.parse::<Tz>()
@@ -215,4 +197,24 @@ pub fn now_in(tz: &Tz) -> DateTime<FixedOffset> {
     let now = Utc::now().with_timezone(tz);
     // Whole seconds keep files tidy and match what other journal apps store.
     now.fixed_offset().with_nanosecond(0).unwrap_or_else(|| now.fixed_offset())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::title_of;
+
+    #[test]
+    fn titles() {
+        assert_eq!(title_of("# Hello\n\nbody"), "Hello");
+        assert_eq!(title_of("\n\n![](../../attachments/x.png)\n\nAfter the photo"), "After the photo");
+        assert_eq!(title_of("![Beach day](x.png)"), "Beach day");
+        assert_eq!(title_of("![](x.png)"), "");
+        assert_eq!(title_of("- first item\n- second"), "first item");
+        assert_eq!(title_of("1. first step"), "first step");
+        assert_eq!(title_of("# 2026-10-29 감사한 것"), "2026-10-29 감사한 것");
+        assert_eq!(title_of("2026 was a year"), "2026 was a year");
+        assert_eq!(title_of("> quoted"), "quoted");
+        assert_eq!(title_of("**bold start** rest"), "bold start** rest");
+        assert_eq!(title_of("---\n\nreal"), "real");
+    }
 }
