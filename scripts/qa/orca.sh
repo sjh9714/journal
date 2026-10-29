@@ -3,13 +3,12 @@
 # Orca, open, osascript and pbcopy are blocked inside the Claude Code sandbox.
 
 QA_DIR="${QA_DIR:-${TMPDIR:-/tmp}/journal-qa}"
-QA_APP="${QA_APP:-dev.journal.desktop}"
 QA_BIN="${QA_BIN:-$(git rev-parse --show-toplevel)/target/release/bundle/macos/Journal.app/Contents/MacOS/journal-desktop}"
 
 # Start the app on a throwaway journal, config and index; the real ones stay untouched.
 # Optional seed: QA_SEED=1 creates a sample entry with the CLI first.
 qa_launch() {
-  pkill -f "Contents/MacOS/journal-desktop" 2>/dev/null; sleep 1
+  pkill -f "$QA_BIN" 2>/dev/null; sleep 1
   mkdir -p "$QA_DIR"
   local cli; cli="$(git rev-parse --show-toplevel)/target/debug/journal"
   if [[ ! -d "$QA_DIR/Journal" ]]; then
@@ -20,14 +19,17 @@ qa_launch() {
   (JOURNAL_ROOT="$QA_DIR/Journal" JOURNAL_CONFIG="$QA_DIR/config.json" JOURNAL_INDEX_DIR="$QA_DIR/idx" \
     nohup "$QA_BIN" > "$QA_DIR/app.log" 2>&1 &)
   sleep 4
-  echo "log: $QA_DIR/app.log"
+  # By PID, never --restore-window: either bundle-ID path makes macOS launch an
+  # installed copy of the app, which opens the real journal.
+  QA_APP="pid:$(pgrep -nf "$QA_BIN")"
+  echo "app: $QA_APP  log: $QA_DIR/app.log"
 }
 
-qa_reset() { pkill -f "Contents/MacOS/journal-desktop" 2>/dev/null; rm -rf "$QA_DIR"; }
+qa_reset() { pkill -f "$QA_BIN" 2>/dev/null; rm -rf "$QA_DIR"; }
 
 # Accessibility tree as text: one line per element, "<index> <role> <label>".
 qa_tree() {
-  orca computer get-app-state --app "$QA_APP" --restore-window --no-screenshot --json \
+  orca computer get-app-state --app "$QA_APP" --no-screenshot --json \
     | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['snapshot']['treeText'])"
 }
 
@@ -68,7 +70,7 @@ qa_key() {
 # Screenshot of the app window, downscaled so reading it costs a fraction of the original.
 qa_shot() {
   local out="${1:-$QA_DIR/shot.png}" src
-  src=$(orca computer get-app-state --app "$QA_APP" --restore-window --json \
+  src=$(orca computer get-app-state --app "$QA_APP" --json \
     | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['screenshot']['path'])")
   sips -Z "${QA_SHOT_MAX:-1200}" "$src" --out "$out" >/dev/null
   echo "$out"

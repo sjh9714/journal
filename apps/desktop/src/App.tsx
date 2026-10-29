@@ -275,7 +275,7 @@ export default function App() {
               {stats && stats.total > 0 && (
                 <p className="stats-line">
                   {stats.streak_days > 0 ? `${stats.streak_days}-day streak` : "No entry yet today"}
-                  {" · "}{stats.this_month} this month · {stats.total} entries · {stats.words.toLocaleString()} words
+                  {` · ${stats.this_month} this month · ${stats.total} ${stats.total === 1 ? "entry" : "entries"} · ${stats.words.toLocaleString()} ${stats.words === 1 ? "word" : "words"}`}
                 </p>
               )}
             </div>

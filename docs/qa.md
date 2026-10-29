@@ -25,6 +25,10 @@ Webview logs (`log_js`) and Rust stderr land in `$QA_DIR/app.log`.
 
 ## Driving the UI
 
+Address the QA app by PID and leave out `--restore-window`, as the helpers do.
+Both `--app dev.journal.desktop` and `--restore-window` go through the bundle
+ID, so macOS launches an installed copy, which opens the real journal.
+
 Assert on the accessibility tree (`qa_find`, `qa_idx`, `qa_click`); it is text
 and costs little. Take a screenshot (`qa_shot`, downscaled) only to judge
 something visual.
