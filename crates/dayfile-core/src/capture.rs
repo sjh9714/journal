@@ -280,7 +280,8 @@ fn git_commits(cfg: &CaptureConfig, date: NaiveDate, tz: Tz, errors: &mut Vec<St
     for repo in repos {
         let name = repo.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let mut cmd = Command::new("git");
-        cmd.arg("-C").arg(&repo).args(["log", "--all", "--no-merges", "--format=%H%x1f%aI%x1f%s"]).arg(format!("--since={since}")).arg(format!("--until={until}"));
+        cmd.arg("-C").arg(&repo).args(["log", "--all", "--no-merges", "--format=%H%x1f%aI%x1f%ae%x1f%s"]).arg(format!("--since={since}")).arg(format!("--until={until}"));
+        // --author is a regex substring match; it only narrows, the exact check is below.
         cmd.arg(format!("--author={author}"));
         let output = match cmd.output() {
             Ok(o) if o.status.success() => o,
@@ -295,7 +296,10 @@ fn git_commits(cfg: &CaptureConfig, date: NaiveDate, tz: Tz, errors: &mut Vec<St
         };
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             let mut f = line.split('\x1f');
-            let (Some(sha), Some(at), Some(subject)) = (f.next(), f.next(), f.next()) else { continue };
+            let (Some(sha), Some(at), Some(email), Some(subject)) = (f.next(), f.next(), f.next(), f.next()) else { continue };
+            if !email.eq_ignore_ascii_case(&author) {
+                continue;
+            }
             let Ok(at) = DateTime::parse_from_rfc3339(at) else { continue };
             let at = at.with_timezone(&tz);
             if at.date_naive() == date {
@@ -318,7 +322,9 @@ fn calendar_events(cfg: &CaptureConfig, date: NaiveDate, tz: Tz, errors: &mut Ve
         };
         for o in crate::ics::occurrences_on(&text, date, tz) {
             let when = o.start.map(|s| s.to_rfc3339()).unwrap_or_else(|| date.to_string());
-            let summary = if o.summary.trim().is_empty() { "(untitled event)".into() } else { clip(o.summary.trim(), 80) };
+            // Invites are written by other people: keep the words, drop Markdown that could link, embed or format.
+            let plain: String = o.summary.chars().filter(|c| !matches!(c, '[' | ']' | '(' | ')' | '<' | '>' | '`' | '*' | '_' | '#' | '!' | '|')).collect();
+            let summary = if plain.trim().is_empty() { "(untitled event)".into() } else { clip(plain.trim(), 80) };
             out.push(Event { key: format!("cal:{}:{when}", o.uid), start: o.start, end: o.end, summary });
         }
     }

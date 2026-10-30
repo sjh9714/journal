@@ -11,10 +11,14 @@ fn day() -> NaiveDate {
 }
 
 fn git(repo: &Path, args: &[&str], when: &str) {
+    git_as(repo, "me@example.com", args, when);
+}
+
+fn git_as(repo: &Path, email: &str, args: &[&str], when: &str) {
     let st = Command::new("git")
         .arg("-C")
         .arg(repo)
-        .args(["-c", "user.name=Me", "-c", "user.email=me@example.com", "-c", "commit.gpgsign=false"])
+        .args(["-c", "user.name=Someone", "-c", &format!("user.email={email}"), "-c", "commit.gpgsign=false"])
         .args(args)
         .env("GIT_AUTHOR_DATE", when)
         .env("GIT_COMMITTER_DATE", when)
@@ -24,9 +28,13 @@ fn git(repo: &Path, args: &[&str], when: &str) {
 }
 
 fn commit(repo: &Path, msg: &str, when: &str) {
+    commit_as(repo, "me@example.com", msg, when);
+}
+
+fn commit_as(repo: &Path, email: &str, msg: &str, when: &str) {
     std::fs::write(repo.join("f.txt"), msg).unwrap();
-    git(repo, &["add", "."], when);
-    git(repo, &["commit", "-q", "-m", msg], when);
+    git_as(repo, email, &["add", "."], when);
+    git_as(repo, email, &["commit", "-q", "-m", msg], when);
 }
 
 /// Smallest JPEG carrying an EXIF DateTimeOriginal.
@@ -61,9 +69,11 @@ fn capture_drafts_the_day_once_and_accept_keeps_it() {
     commit(&repo, "Add order endpoint", "2026-10-28T10:12:00+09:00");
     commit(&repo, "Fix refund rounding", "2026-10-28T16:40:00+09:00");
     commit(&repo, "Yesterday's work", "2026-10-27T23:00:00+09:00");
+    // Someone whose email merely contains ours stays out.
+    commit_as(&repo, "notme@example.com.evil", "Their change", "2026-10-28T12:00:00+09:00");
 
     let ics = dir.path().join("cal.ics");
-    std::fs::write(&ics, "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:s1\nSUMMARY:Standup\nDTSTART;TZID=Asia/Seoul:20261028T093000\nDTEND;TZID=Asia/Seoul:20261028T094500\nEND:VEVENT\nEND:VCALENDAR\n").unwrap();
+    std::fs::write(&ics, "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:s1\nSUMMARY:Standup\nDTSTART;TZID=Asia/Seoul:20261028T093000\nDTEND;TZID=Asia/Seoul:20261028T094500\nEND:VEVENT\nBEGIN:VEVENT\nUID:s2\nSUMMARY:![x](https://evil.example/p.png) [Call](https://evil.example)\nDTSTART;TZID=Asia/Seoul:20261028T200000\nEND:VEVENT\nEND:VCALENDAR\n").unwrap();
 
     let photos = dir.path().join("photos");
     std::fs::create_dir_all(&photos).unwrap();
@@ -79,16 +89,18 @@ fn capture_drafts_the_day_once_and_accept_keeps_it() {
 
     let r = store.capture(day(), &cfg).unwrap();
     assert!(r.errors.is_empty(), "{:?}", r.errors);
-    assert_eq!((r.commits, r.events, r.photos, r.created), (2, 1, 1, true));
+    assert_eq!((r.commits, r.events, r.photos, r.created), (2, 2, 1, true));
     let draft = r.draft.unwrap();
     assert!(draft.draft);
-    assert_eq!(draft.title, "Standup, 2 commits to shop-api, 1 photo");
+    assert_eq!(draft.title, "Standup and 1 more, 2 commits to shop-api, 1 photo");
     let e = store.get(&draft.uuid).unwrap();
     assert!(e.body.contains("- 09:30–09:45 · Standup"), "{}", e.body);
     assert!(e.body.contains("- 10:12–16:40 · shop-api · 2 commits (Add order endpoint; Fix refund rounding)"), "{}", e.body);
     assert!(e.body.contains("- 18:20 · 1 photo"), "{}", e.body);
+    assert!(e.body.contains("- 20:00 · xhttps://evil.example/p.png Callhttps://evil.example"), "markdown stripped: {}", e.body);
+    assert!(!e.body.contains("Their change"), "{}", e.body);
     assert!(e.body.contains("](../../attachments/"), "{}", e.body);
-    assert_eq!(e.meta.traces.len(), 4);
+    assert_eq!(e.meta.traces.len(), 5);
     assert_eq!(e.local_date(), day());
 
     // Drafts stay out of the timeline, search and stats until accepted.
