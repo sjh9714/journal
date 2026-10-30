@@ -1,14 +1,14 @@
 # Native QA
 
 The mock UI (`npx vite`) covers layout and most flows. Use the native app for
-anything that touches Tauri: file IO, the `journal://` scheme, dialogs, the
+anything that touches Tauri: file IO, the `dayfile://` scheme, dialogs, the
 lock, notifications, and real keyboard input.
 
 ## Build and launch
 
 ```sh
-cargo build -p journal-cli                 # the CLI seeds test journals
-cd apps/desktop && npm run tauri build     # bundle: target/release/bundle/macos/Journal.app
+cargo build -p dayfile-cli                 # the CLI seeds test journals
+cd apps/desktop && npm run tauri build     # bundle: target/release/bundle/macos/Dayfile.app
 . scripts/qa/orca.sh && qa_launch          # throwaway journal, config and index
 ```
 
@@ -17,16 +17,16 @@ its lock settings:
 
 | variable | overrides |
 |---|---|
-| `JOURNAL_ROOT` | journal folder from config.json |
-| `JOURNAL_CONFIG` | config.json path (lock hash, reminder, root) |
-| `JOURNAL_INDEX_DIR` | where the SQLite index lives |
+| `DAYFILE_ROOT` | journal folder from config.json |
+| `DAYFILE_CONFIG` | config.json path (lock hash, reminder, root) |
+| `DAYFILE_INDEX_DIR` | where the SQLite index lives |
 
 Webview logs (`log_js`) and Rust stderr land in `$QA_DIR/app.log`.
 
 ## Driving the UI
 
 Address the QA app by PID and leave out `--restore-window`, as the helpers do.
-Both `--app dev.journal.desktop` and `--restore-window` go through the bundle
+Both `--app dev.dayfile.app` and `--restore-window` go through the bundle
 ID, so macOS launches an installed copy, which opens the real journal.
 
 Assert on the accessibility tree (`qa_find`, `qa_idx`, `qa_click`); it is text
@@ -47,7 +47,7 @@ Input, by target:
 
 ## Feature notes
 
-- **Lock**: a fresh `JOURNAL_CONFIG` starts unlocked. Set the idle timeout to
+- **Lock**: a fresh `DAYFILE_CONFIG` starts unlocked. Set the idle timeout to
   1 minute in Settings to check the idle lock without waiting long.
 - **Reminder**: notifications fire only from the bundled app, not `tauri dev`.
   Write `{"reminder": {"enabled": true, "time": "HH:MM"}}` to the QA config

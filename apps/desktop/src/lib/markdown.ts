@@ -1,8 +1,8 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { IN_TAURI } from "../api";
 
-/** Base URL the `journal://` scheme answers on, e.g. journal://localhost/ */
-const BASE = IN_TAURI ? convertFileSrc("", "journal") : "/__journal__/";
+/** Base URL the `dayfile://` scheme answers on, e.g. dayfile://localhost/ */
+const BASE = IN_TAURI ? convertFileSrc("", "dayfile") : "/__dayfile__/";
 const DISK_PREFIX = "../../attachments/";
 const WEB_PREFIX = `${BASE}attachments/`;
 

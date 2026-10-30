@@ -1,9 +1,9 @@
-//! Tauri shell around `journal_core::Store`. Every command is a thin wrapper;
-//! the `journal://` scheme serves attachment files to the webview.
+//! Tauri shell around `dayfile_core::Store`. Every command is a thin wrapper;
+//! the `dayfile://` scheme serves attachment files to the webview.
 
 use chrono::NaiveDate;
-use journal_core::store::{EntryPatch, ReindexStats};
-use journal_core::{import_dayone, Entry, EntrySummary, ImportOptions, ImportReport, ListFilter, NewEntry, Problem, Stats, Store, Template, TrashedEntry};
+use dayfile_core::store::{EntryPatch, ReindexStats};
+use dayfile_core::{import_dayone, Entry, EntrySummary, ImportOptions, ImportReport, ListFilter, NewEntry, Problem, Stats, Store, Template, TrashedEntry};
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use rand_core::OsRng;
 use argon2::Argon2;
@@ -132,7 +132,7 @@ fn save_config(path: &Path, cfg: &Config) -> CmdResult<()> {
     std::fs::write(path, serde_json::to_string_pretty(cfg).map_err(err)?).map_err(err)
 }
 
-fn with_store<T>(state: &State<AppState>, f: impl FnOnce(&mut Store) -> journal_core::Result<T>) -> CmdResult<T> {
+fn with_store<T>(state: &State<AppState>, f: impl FnOnce(&mut Store) -> dayfile_core::Result<T>) -> CmdResult<T> {
     let mut guard = state.store.lock().unwrap_or_else(|p| p.into_inner());
     let store = guard.as_mut().ok_or_else(|| "no journal open".to_string())?;
     f(store).map_err(err)
@@ -404,7 +404,7 @@ fn mime_for(path: &Path) -> &'static str {
     }
 }
 
-/// journal://localhost/attachments/<file>  ->  <root>/attachments/<file>
+/// dayfile://localhost/attachments/<file>  ->  <root>/attachments/<file>
 fn serve_attachment(app: &AppHandle, uri_path: &str) -> tauri::http::Response<Vec<u8>> {
     use tauri::http::{Response, StatusCode};
     let decoded = percent_decode(uri_path.trim_start_matches('/'));
@@ -454,19 +454,28 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            // JOURNAL_CONFIG points at an alternative config.json (tests, QA).
-            let config_path = match std::env::var_os("JOURNAL_CONFIG") {
+            // DAYFILE_CONFIG points at an alternative config.json (tests, QA).
+            let config_path = match std::env::var_os("DAYFILE_CONFIG") {
                 Some(p) => PathBuf::from(p),
                 None => app.path().app_config_dir()?.join("config.json"),
             };
+            // Settings from before the rename (bundle id dev.journal.desktop).
+            if !config_path.exists() {
+                if let Some(old) = config_path.parent().and_then(|d| d.parent()).map(|d| d.join("dev.journal.desktop/config.json")) {
+                    if old.exists() {
+                        let _ = std::fs::create_dir_all(config_path.parent().unwrap());
+                        let _ = std::fs::copy(&old, &config_path);
+                    }
+                }
+            }
             let cfg = load_config(&config_path);
-            // JOURNAL_ROOT overrides the saved folder without touching the config (testing, scripts).
-            let root = std::env::var("JOURNAL_ROOT").ok().or(cfg.root);
+            // DAYFILE_ROOT overrides the saved folder without touching the config (testing, scripts).
+            let root = std::env::var("DAYFILE_ROOT").ok().or(cfg.root);
             let store = root.as_deref().and_then(|r| Store::open(r).ok());
             app.manage(AppState { store: Mutex::new(store), config_path, attempts: Mutex::new((0, None)) });
             Ok(())
         })
-        .register_uri_scheme_protocol("journal", |ctx, request| serve_attachment(ctx.app_handle(), request.uri().path()))
+        .register_uri_scheme_protocol("dayfile", |ctx, request| serve_attachment(ctx.app_handle(), request.uri().path()))
         .invoke_handler(tauri::generate_handler![
             log_js,
             get_status,

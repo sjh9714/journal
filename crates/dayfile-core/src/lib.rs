@@ -1,4 +1,4 @@
-//! journal-core: a Markdown-file journal with a disposable SQLite index.
+//! dayfile-core: a Markdown-file journal with a disposable SQLite index.
 //!
 //! Every entry is one Markdown file with YAML frontmatter under
 //! `<root>/entries/YYYY/YYYY-MM-DD-<uuid8>.md`. Attachments live under

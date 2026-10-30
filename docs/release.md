@@ -7,7 +7,7 @@ git tag v0.1.0 && git push origin v0.1.0
 ```
 
 Artifacts: macOS `.dmg` (Apple Silicon and Intel), Windows `.msi`/`.exe`,
-Linux `.AppImage`/`.deb`, plus a standalone `journal` CLI per platform.
+Linux `.AppImage`/`.deb`, plus a standalone `dayfile` CLI per platform.
 Review the draft on GitHub, then publish.
 
 Re-run for an existing tag without re-tagging:

@@ -36,7 +36,7 @@ export async function runSelfTest(open: (id: string) => Promise<void>) {
         el.onerror = () => r(false);
         el.src = url;
       });
-      check("journal:// image loads", loaded, url);
+      check("dayfile:// image loads", loaded, url);
       const upd = await api.update(made.uuid, { body: `${made.body}\n![](${a.link})\n`, starred: true });
       check("update starred", upd.starred);
       await open(upd.uuid);

@@ -95,7 +95,7 @@ export function Settings({ status, theme, onTheme, onStatus, onImported, problem
   const reveal = (rel: string) => {
     if (IN_TAURI && status.root) revealItemInDir(`${status.root}/${rel}`);
   };
-  const mcpCmd = "claude mcp add journal -- journal mcp serve";
+  const mcpCmd = "claude mcp add dayfile -- dayfile mcp serve";
 
   return (
     <div className="settings">
@@ -233,8 +233,8 @@ export function Settings({ status, theme, onTheme, onStatus, onImported, problem
         <h3>Help</h3>
         <p className="dim">Found a bug or an export that would not import? No telemetry leaves this app, so a report is the only way we hear about it.</p>
         <div className="btn-row">
-          <button onClick={() => (IN_TAURI ? openUrl("https://github.com/sjh9714/journal/issues/new/choose") : window.open("https://github.com/sjh9714/journal/issues/new/choose"))}>Report a problem</button>
-          <button onClick={() => (IN_TAURI ? openUrl("https://github.com/sjh9714/journal") : window.open("https://github.com/sjh9714/journal"))}>Source on GitHub</button>
+          <button onClick={() => (IN_TAURI ? openUrl("https://github.com/sjh9714/dayfile/issues/new/choose") : window.open("https://github.com/sjh9714/dayfile/issues/new/choose"))}>Report a problem</button>
+          <button onClick={() => (IN_TAURI ? openUrl("https://github.com/sjh9714/dayfile") : window.open("https://github.com/sjh9714/dayfile"))}>Source on GitHub</button>
         </div>
       </section>
 

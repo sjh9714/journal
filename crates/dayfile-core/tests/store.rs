@@ -1,11 +1,11 @@
 use chrono::{DateTime, FixedOffset, NaiveDate};
-use journal_core::store::EntryPatch;
-use journal_core::{ListFilter, NewEntry, Store};
+use dayfile_core::store::EntryPatch;
+use dayfile_core::{ListFilter, NewEntry, Store};
 use tempfile::TempDir;
 
 fn tmp_store() -> (TempDir, Store) {
     let dir = TempDir::new().unwrap();
-    std::env::set_var("JOURNAL_INDEX_DIR", dir.path().join("index"));
+    std::env::set_var("DAYFILE_INDEX_DIR", dir.path().join("index"));
     let store = Store::init(dir.path().join("Journal")).unwrap();
     (dir, store)
 }

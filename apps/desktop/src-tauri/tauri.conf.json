@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Journal",
+  "productName": "Dayfile",
   "version": "0.1.0",
-  "identifier": "dev.journal.desktop",
+  "identifier": "dev.dayfile.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Journal",
+        "title": "Dayfile",
         "width": 1180,
         "height": 760,
         "minWidth": 820,
@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' journal: http://journal.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://api.open-meteo.com https://ipapi.co"
+      "csp": "default-src 'self'; img-src 'self' dayfile: http://dayfile.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://api.open-meteo.com https://ipapi.co"
     }
   },
   "bundle": {

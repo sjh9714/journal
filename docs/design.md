@@ -6,7 +6,7 @@ Five choices shape everything else. Each one was a trade, not a default.
 
 Every entry is a Markdown file with YAML frontmatter. The SQLite/FTS5 index
 lives outside the journal folder and can be rebuilt from the files at any
-time (`journal reindex --full`).
+time (`dayfile reindex --full`).
 
 Why: ownership and sync. A folder of text files survives the app, syncs with
 any tool, and a conflict damages one entry, not a database. The cost is that
@@ -18,7 +18,7 @@ everything and sync tools cannot merge it) and a custom binary format.
 
 ## 2. One command registry, three surfaces
 
-All behaviour lives in `crates/journal-core::Store`. The CLI, the MCP server
+All behaviour lives in `crates/dayfile-core::Store`. The CLI, the MCP server
 and the desktop app call the same functions. A feature is not done until it
 exists on all three.
 

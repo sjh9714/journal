@@ -1,16 +1,16 @@
 [package]
-name = "journal-cli"
+name = "dayfile-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Command-line interface for journal"
 
 [[bin]]
-name = "journal"
+name = "dayfile"
 path = "src/main.rs"
 
 [dependencies]
-journal-core = { path = "../journal-core" }
+dayfile-core = { path = "../dayfile-core" }
 anyhow.workspace = true
 clap = { version = "4.6", features = ["derive", "env"] }
 chrono.workspace = true

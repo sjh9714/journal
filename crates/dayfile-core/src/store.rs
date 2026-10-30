@@ -16,7 +16,7 @@ pub use crate::index::ListFilter;
 
 pub const ENTRIES_DIR: &str = "entries";
 pub const ATTACHMENTS_DIR: &str = "attachments";
-pub const MARKER_DIR: &str = ".journal";
+pub const MARKER_DIR: &str = ".dayfile";
 
 pub struct Store {
     root: PathBuf,
@@ -69,12 +69,13 @@ impl Store {
     /// Create the folder layout if needed and open the store.
     pub fn init(root: impl AsRef<Path>) -> Result<Self> {
         let root = root.as_ref().to_path_buf();
+        migrate_marker(&root)?;
         std::fs::create_dir_all(root.join(ENTRIES_DIR))?;
         std::fs::create_dir_all(root.join(ATTACHMENTS_DIR))?;
         std::fs::create_dir_all(root.join(MARKER_DIR))?;
-        let marker = root.join(MARKER_DIR).join("journal.toml");
+        let marker = root.join(MARKER_DIR).join("dayfile.toml");
         if !marker.exists() {
-            std::fs::write(&marker, "# journal folder marker. Safe to sync.\nformat = 1\n")?;
+            std::fs::write(&marker, "# dayfile journal folder marker. Safe to sync.\nformat = 1\n")?;
         }
         let store = Self::open(root)?;
         store.ensure_default_templates()?;
@@ -87,6 +88,7 @@ impl Store {
         if !root.join(ENTRIES_DIR).is_dir() {
             return Err(Error::RootMissing(root));
         }
+        migrate_marker(&root)?;
         let root = root.canonicalize()?;
         let index = Index::open(&Self::index_path(&root))?;
         let mut store = Self { root, index, problems: Vec::new() };
@@ -108,11 +110,11 @@ impl Store {
     }
 
     /// Where the SQLite index lives: outside the journal folder so sync tools
-    /// never see it. `JOURNAL_INDEX_DIR` overrides the base directory.
+    /// never see it. `DAYFILE_INDEX_DIR` overrides the base directory.
     pub fn index_path(root: &Path) -> PathBuf {
-        let base = std::env::var_os("JOURNAL_INDEX_DIR")
+        let base = std::env::var_os("DAYFILE_INDEX_DIR")
             .map(PathBuf::from)
-            .or_else(|| dirs::data_local_dir().map(|d| d.join("journal")))
+            .or_else(|| dirs::data_local_dir().map(|d| d.join("dayfile")))
             .unwrap_or_else(|| root.join(MARKER_DIR));
         let digest = Sha256::digest(root.to_string_lossy().as_bytes());
         let short = digest.iter().take(6).map(|b| format!("{b:02x}")).collect::<String>();
@@ -373,6 +375,20 @@ impl Store {
         self.index.upsert(entry, file_mtime(&abs))?;
         Ok(())
     }
+}
+
+/// Folders made before the rename keep their marker and trash in `.journal/`.
+fn migrate_marker(root: &Path) -> Result<()> {
+    let old = root.join(".journal");
+    let new = root.join(MARKER_DIR);
+    if old.is_dir() && !new.exists() {
+        std::fs::rename(&old, &new)?;
+        let marker = new.join("journal.toml");
+        if marker.exists() {
+            std::fs::rename(marker, new.join("dayfile.toml"))?;
+        }
+    }
+    Ok(())
 }
 
 fn file_mtime(p: &Path) -> i64 {

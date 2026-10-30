@@ -3,20 +3,20 @@
 # Orca, open, osascript and pbcopy are blocked inside the Claude Code sandbox.
 
 QA_DIR="${QA_DIR:-${TMPDIR:-/tmp}/journal-qa}"
-QA_BIN="${QA_BIN:-$(git rev-parse --show-toplevel)/target/release/bundle/macos/Journal.app/Contents/MacOS/journal-desktop}"
+QA_BIN="${QA_BIN:-$(git rev-parse --show-toplevel)/target/release/bundle/macos/Dayfile.app/Contents/MacOS/dayfile-desktop}"
 
 # Start the app on a throwaway journal, config and index; the real ones stay untouched.
 # Optional seed: QA_SEED=1 creates a sample entry with the CLI first.
 qa_launch() {
   pkill -f "$QA_BIN" 2>/dev/null; sleep 1
   mkdir -p "$QA_DIR"
-  local cli; cli="$(git rev-parse --show-toplevel)/target/debug/journal"
+  local cli; cli="$(git rev-parse --show-toplevel)/target/debug/dayfile"
   if [[ ! -d "$QA_DIR/Journal" ]]; then
-    JOURNAL_INDEX_DIR="$QA_DIR/idx" "$cli" --root "$QA_DIR/Journal" init >/dev/null
-    [[ -n "${QA_SEED:-}" ]] && JOURNAL_INDEX_DIR="$QA_DIR/idx" "$cli" --root "$QA_DIR/Journal" add "QA seed entry" >/dev/null
+    DAYFILE_INDEX_DIR="$QA_DIR/idx" "$cli" --root "$QA_DIR/Journal" init >/dev/null
+    [[ -n "${QA_SEED:-}" ]] && DAYFILE_INDEX_DIR="$QA_DIR/idx" "$cli" --root "$QA_DIR/Journal" add "QA seed entry" >/dev/null
   fi
   [[ -f "$QA_DIR/config.json" ]] || echo '{}' > "$QA_DIR/config.json"
-  (JOURNAL_ROOT="$QA_DIR/Journal" JOURNAL_CONFIG="$QA_DIR/config.json" JOURNAL_INDEX_DIR="$QA_DIR/idx" \
+  (DAYFILE_ROOT="$QA_DIR/Journal" DAYFILE_CONFIG="$QA_DIR/config.json" DAYFILE_INDEX_DIR="$QA_DIR/idx" \
     nohup "$QA_BIN" > "$QA_DIR/app.log" 2>&1 &)
   sleep 4
   # By PID, never --restore-window: either bundle-ID path makes macOS launch an

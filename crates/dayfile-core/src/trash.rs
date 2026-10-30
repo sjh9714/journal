@@ -1,4 +1,4 @@
-//! Soft delete. Deleted entries move to `.journal/trash/` inside the journal
+//! Soft delete. Deleted entries move to `.dayfile/trash/` inside the journal
 //! folder (so they sync like everything else) and are purged after 30 days.
 //! File name: `<deleted_unix_secs>__<original file name>`.
 
@@ -9,7 +9,7 @@ use chrono::{DateTime, FixedOffset, TimeZone, Utc};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
-pub const TRASH_DIR: &str = ".journal/trash";
+pub const TRASH_DIR: &str = ".dayfile/trash";
 pub const RETENTION_DAYS: i64 = 30;
 
 #[derive(Debug, Clone, Serialize)]
@@ -130,7 +130,7 @@ impl Store {
         Ok(n)
     }
 
-    /// Bypass the trash. Used by `journal delete --permanent`.
+    /// Bypass the trash. Used by `dayfile delete --permanent`.
     pub fn delete_permanent(&mut self, id: &str) -> Result<Entry> {
         let entry = self.get(id)?;
         std::fs::remove_file(self.root().join(&entry.path))?;

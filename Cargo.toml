@@ -1,12 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["crates/journal-core", "crates/journal-cli", "apps/desktop/src-tauri"]
+members = ["crates/dayfile-core", "crates/dayfile-cli", "apps/desktop/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/sjh9714/journal"
+repository = "https://github.com/sjh9714/dayfile"
 
 [workspace.dependencies]
 anyhow = "1.0"

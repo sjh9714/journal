@@ -1,9 +1,9 @@
-//! MCP server over stdio. Every tool is a thin call into `journal_core::Store`.
+//! MCP server over stdio. Every tool is a thin call into `dayfile_core::Store`.
 
 use anyhow::{anyhow, Result};
 use chrono::NaiveDate;
-use journal_core::store::EntryPatch;
-use journal_core::{today, Entry, EntrySummary, ListFilter, NewEntry, Store};
+use dayfile_core::store::EntryPatch;
+use dayfile_core::{today, Entry, EntrySummary, ListFilter, NewEntry, Store};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::model::{ErrorData, Implementation, ServerCapabilities, ServerConfig};
@@ -271,8 +271,8 @@ impl JournalServer {
                 journal: p.journal,
                 tags: p.tags,
                 starred: p.starred,
-                location: p.location.map(|l| journal_core::Location { latitude: l.latitude, longitude: l.longitude, place_name: l.place_name }),
-                weather: p.weather.map(|w| journal_core::Weather { temperature_c: w.temperature_c, conditions: w.conditions }),
+                location: p.location.map(|l| dayfile_core::Location { latitude: l.latitude, longitude: l.longitude, place_name: l.place_name }),
+                weather: p.weather.map(|w| dayfile_core::Weather { temperature_c: w.temperature_c, conditions: w.conditions }),
                 ..Default::default()
             })
             .map_err(internal)?;
@@ -309,7 +309,7 @@ impl JournalServer {
         Ok(Json(e.into()))
     }
 
-    #[tool(description = "Move an entry to the trash (restorable for 30 days from the app or `journal trash restore`). Returns the removed entry.")]
+    #[tool(description = "Move an entry to the trash (restorable for 30 days from the app or `dayfile trash restore`). Returns the removed entry.")]
     async fn delete_entry(&self, p: Parameters<DeleteParams>) -> Result<Json<EntryOut>, ErrorData> {
         self.guard_write()?;
         let e = self.lock().delete(&p.0.id).map_err(bad)?;
@@ -322,7 +322,7 @@ impl ServerHandler for JournalServer {
     fn get_info(&self) -> ServerConfig {
         let mode = if self.read_only { "read-only" } else { "read-write" };
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("journal", env!("CARGO_PKG_VERSION")))
+            .with_server_info(Implementation::new("dayfile", env!("CARGO_PKG_VERSION")))
             .with_instructions(format!(
             "Personal journal stored as Markdown files ({mode}). Use search_entries or list_entries to find entries, \
              get_entry for a full body, on_this_day for anniversaries, and append_to_today to add to today's entry. \

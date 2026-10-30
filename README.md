@@ -1,4 +1,4 @@
-# Journal
+# Dayfile
 
 A journal that is just a folder of Markdown files, with an app that feels
 like Day One and an MCP server so your agent can read and write it.
@@ -15,7 +15,7 @@ like Day One and an MCP server so your agent can read and write it.
   tags, multiple journals, calendar view, dark mode, streak and word counts.
 - **Templates** (`templates/*.md`, three included), a **daily reminder**,
   a **passcode lock**, and a **trash** that keeps deleted entries for 30 days.
-- **Agents.** `journal mcp serve` exposes 11 tools over MCP; the CLI does
+- **Agents.** `dayfile mcp serve` exposes 11 tools over MCP; the CLI does
   the same from a shell. See [`docs/mcp.md`](docs/mcp.md).
 - **No account, no server, no telemetry.** Optional location/weather uses the
   OS location service when available, otherwise a city-level guess from your
@@ -25,30 +25,30 @@ like Day One and an MCP server so your agent can read and write it.
 ## Install
 
 Desktop app: download the build for macOS, Windows or Linux from
-[Releases](https://github.com/sjh9714/journal/releases). The macOS builds are
+[Releases](https://github.com/sjh9714/dayfile/releases). The macOS builds are
 signed and notarized.
 
 CLI (also the MCP server):
 
 ```sh
-brew install --cask sjh9714/tap/journal   # macOS; or grab a binary from Releases
-journal init                       # creates ~/Journal (or follows the desktop app's folder)
-journal add "First entry" -t life
-journal list
-journal search first
-journal on-this-day
-journal add --template gratitude   # see `journal templates`
-journal delete <id>                # to the trash; `journal trash restore <id>` undoes it
-journal stats
+brew install --cask sjh9714/tap/dayfile   # macOS; or grab a binary from Releases
+dayfile init                       # creates ~/Journal (or follows the desktop app's folder)
+dayfile add "First entry" -t life
+dayfile list
+dayfile search first
+dayfile on-this-day
+dayfile add --template gratitude   # see `dayfile templates`
+dayfile delete <id>                # to the trash; `dayfile trash restore <id>` undoes it
+dayfile stats
 ```
 
 ## Let your agent in
 
 ```sh
-claude mcp add journal -- journal mcp serve
+claude mcp add dayfile -- dayfile mcp serve
 ```
 
-Claude Desktop: download `journal-0.1.0.mcpb` from Releases and open it.
+Claude Desktop: download `dayfile-0.1.0.mcpb` from Releases and open it.
 
 Then: "add a line to today's journal about the deploy", "what did I write
 about the move last year?", "summarise my week". `--read-only` if you only
@@ -60,7 +60,7 @@ Day One → Export → JSON. Then in the app: Settings → Import Day One export
 or:
 
 ```sh
-journal import dayone ~/Downloads/Export.zip
+dayfile import dayone ~/Downloads/Export.zip
 ```
 
 ## On your phone

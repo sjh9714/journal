@@ -3,17 +3,17 @@ mod mcp;
 use anyhow::{bail, Context, Result};
 use chrono::{Local, NaiveDate};
 use clap::{Args, Parser, Subcommand};
-use journal_core::store::EntryPatch;
-use journal_core::{import_dayone, today, EntrySummary, ImportOptions, ListFilter, NewEntry, Store};
+use dayfile_core::store::EntryPatch;
+use dayfile_core::{import_dayone, today, EntrySummary, ImportOptions, ListFilter, NewEntry, Store};
 use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 
 /// Your journal, as Markdown files on disk. Readable by you and your agents.
 #[derive(Parser)]
-#[command(name = "journal", version, about)]
+#[command(name = "dayfile", version, about)]
 struct Cli {
-    /// Journal folder. Defaults to $JOURNAL_ROOT, then ~/Journal.
-    #[arg(long, global = true, env = "JOURNAL_ROOT")]
+    /// Journal folder. Defaults to $DAYFILE_ROOT, then ~/Journal.
+    #[arg(long, global = true, env = "DAYFILE_ROOT")]
     root: Option<PathBuf>,
     /// Output JSON instead of text.
     #[arg(long, global = true)]
@@ -87,7 +87,7 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum McpCmd {
-    /// Serve over stdio. Add to Claude Code with: claude mcp add journal -- journal mcp serve
+    /// Serve over stdio. Add to Claude Code with: claude mcp add dayfile -- dayfile mcp serve
     Serve {
         /// Expose only read tools.
         #[arg(long)]
@@ -131,7 +131,7 @@ struct AddArgs {
     at: Option<String>,
     #[arg(long)]
     starred: bool,
-    /// Start from a template (see `journal templates`).
+    /// Start from a template (see `dayfile templates`).
     #[arg(long)]
     template: Option<String>,
 }
@@ -168,8 +168,8 @@ struct EditArgs {
     unstar: bool,
 }
 
-/// --root, then $JOURNAL_ROOT (clap), then the folder the desktop app uses,
-/// then ~/Journal. Keeps `journal` and the app on the same journal by default.
+/// --root, then $DAYFILE_ROOT (clap), then the folder the desktop app uses,
+/// then ~/Journal. Keeps `dayfile` and the app on the same journal by default.
 fn default_root() -> PathBuf {
     if let Some(root) = desktop_app_root() {
         return root;
@@ -178,8 +178,11 @@ fn default_root() -> PathBuf {
 }
 
 fn desktop_app_root() -> Option<PathBuf> {
-    let cfg = dirs::config_dir()?.join("dev.journal.desktop").join("config.json");
-    let text = std::fs::read_to_string(cfg).ok()?;
+    let dir = dirs::config_dir()?;
+    // dev.journal.desktop: the app's id before the rename.
+    let text = ["dev.dayfile.app", "dev.journal.desktop"]
+        .iter()
+        .find_map(|id| std::fs::read_to_string(dir.join(id).join("config.json")).ok())?;
     let v: serde_json::Value = serde_json::from_str(&text).ok()?;
     let root = PathBuf::from(v.get("root")?.as_str()?);
     root.join("entries").is_dir().then_some(root)
@@ -196,7 +199,7 @@ fn main() -> Result<()> {
     }
 
     let mut store = Store::open(&root)
-        .with_context(|| format!("no journal at {}. Run `journal init` or pass --root.", root.display()))?;
+        .with_context(|| format!("no journal at {}. Run `dayfile init` or pass --root.", root.display()))?;
 
     match cli.cmd {
         Cmd::Init => unreachable!(),
@@ -294,7 +297,7 @@ fn main() -> Result<()> {
                 println!("{}  deleted permanently {}", short(&e.meta.uuid), e.path.display());
             } else {
                 let e = store.delete(&id)?;
-                println!("{}  moved to trash (journal trash restore {} to undo)", short(&e.meta.uuid), short(&e.meta.uuid));
+                println!("{}  moved to trash (dayfile trash restore {} to undo)", short(&e.meta.uuid), short(&e.meta.uuid));
             }
         }
         Cmd::Trash(TrashCmd::List) => {

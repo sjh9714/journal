@@ -1,4 +1,4 @@
-use journal_core::{import_dayone, ImportOptions, ListFilter, Store};
+use dayfile_core::{import_dayone, ImportOptions, ListFilter, Store};
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -8,7 +8,7 @@ fn fixture(name: &str) -> PathBuf {
 
 fn tmp_store() -> (TempDir, Store) {
     let dir = TempDir::new().unwrap();
-    std::env::set_var("JOURNAL_INDEX_DIR", dir.path().join("index"));
+    std::env::set_var("DAYFILE_INDEX_DIR", dir.path().join("index"));
     let store = Store::init(dir.path().join("Journal")).unwrap();
     (dir, store)
 }

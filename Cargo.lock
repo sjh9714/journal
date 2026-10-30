@@ -827,6 +827,62 @@ dependencies = [
 ]
 
 [[package]]
+name = "dayfile-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "dayfile-core",
+ "dirs 6.0.0",
+ "rmcp",
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "dayfile-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "chrono-tz",
+ "dirs 6.0.0",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_norway",
+ "sha2 0.11.1",
+ "tempfile",
+ "thiserror 2.0.21",
+ "uuid",
+ "walkdir",
+ "zip",
+]
+
+[[package]]
+name = "dayfile-desktop"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "argon2",
+ "chrono",
+ "dayfile-core",
+ "dirs 6.0.0",
+ "rand_core 0.6.4",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+]
+
+[[package]]
 name = "dbus"
 version = "0.9.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2119,62 +2175,6 @@ checksum = "38c0b942f458fe50cdac086d2f946512305e5631e720728f2a61aabcd47a6264"
 dependencies = [
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "journal-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "dirs 6.0.0",
- "journal-core",
- "rmcp",
- "schemars 1.2.3",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "journal-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "chrono-tz",
- "dirs 6.0.0",
- "rusqlite",
- "serde",
- "serde_json",
- "serde_norway",
- "sha2 0.11.1",
- "tempfile",
- "thiserror 2.0.21",
- "uuid",
- "walkdir",
- "zip",
-]
-
-[[package]]
-name = "journal-desktop"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "argon2",
- "chrono",
- "dirs 6.0.0",
- "journal-core",
- "rand_core 0.6.4",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
 ]
 
 [[package]]

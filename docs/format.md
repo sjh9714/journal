@@ -4,15 +4,15 @@ A journal is a folder. Nothing in it needs this app to be read.
 
 ```
 Journal/
-  .journal/journal.toml        marker; safe to sync
-  .journal/trash/              deleted entries, `<unix-secs>__<file>.md`, purged after 30 days
+  .dayfile/dayfile.toml        marker; safe to sync
+  .dayfile/trash/              deleted entries, `<unix-secs>__<file>.md`, purged after 30 days
   entries/
     2026/
       2026-10-28-6d65312f.md   one entry per file
   attachments/
     <sha256>.png               content-addressed; referenced from entries
   templates/
-    gratitude.md               frontmatter `name`, optional `tags`/`journal`; body may use
+    gratitude.md               frontmatter `name`, optional `tags`/`dayfile`; body may use
                                {{date}} {{weekday}} {{time}} {{year}}
 ```
 
@@ -20,7 +20,7 @@ The search index (SQLite, FTS5) lives **outside** the folder, under the OS
 data directory (`~/Library/Application Support/journal/<hash>/index.db` on
 macOS, `~/.local/share/journal/...` on Linux, `%LOCALAPPDATA%\journal\...` on
 Windows). It is a cache: delete it and it is rebuilt from the files.
-`JOURNAL_INDEX_DIR` overrides the base directory.
+`DAYFILE_INDEX_DIR` overrides the base directory.
 
 ## Entry file
 
@@ -56,7 +56,7 @@ entry file:
 | `uuid` | yes | canonical lower-case UUID. File name carries its first 8 hex chars. |
 | `created` | yes | RFC 3339 **with the entry's own offset**. The calendar date of the entry is taken from this, never from the machine's zone. |
 | `timezone` | yes | IANA name. Used to render the offset and for "today" arithmetic. |
-| `journal` | no | notebook name, default `default`. |
+| `dayfile` | no | notebook name, default `default`. |
 | `tags` | no | sorted, de-duplicated, no leading `#`. |
 | `starred` | no | omitted when false. |
 | `location`, `weather` | no | omitted when absent. |

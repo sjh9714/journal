@@ -27,7 +27,7 @@ export function Onboarding({ status, onReady }: { status: Status; onReady: (s: S
   return (
     <div className="onboard" data-tauri-drag-region>
       <div className="onboard-card">
-        <h1>Journal</h1>
+        <h1>Dayfile</h1>
         <p>Your entries are plain Markdown files in a folder you own. Sync them with any tool, read them with any editor, or let your agent in over MCP.</p>
         <button className="primary" disabled={busy} onClick={() => go(status.default_root, true)}>
           Create at {status.default_root}

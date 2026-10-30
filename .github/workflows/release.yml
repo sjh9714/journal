@@ -83,7 +83,7 @@ jobs:
         with:
           projectPath: apps/desktop
           tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: Journal ${{ inputs.tag || github.ref_name }}
+          releaseName: Dayfile ${{ inputs.tag || github.ref_name }}
           releaseDraft: true
           args: ${{ matrix.args }}
   cli:
@@ -108,15 +108,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - run: cargo build --release -p journal-cli --target ${{ matrix.target }}
+      - run: cargo build --release -p dayfile-cli --target ${{ matrix.target }}
       - name: Package
         shell: bash
         run: |
           mkdir -p out
           if [ "${{ runner.os }}" = "Windows" ]; then
-            cp target/${{ matrix.target }}/release/journal.exe out/journal-${{ matrix.target }}.exe
+            cp target/${{ matrix.target }}/release/dayfile.exe out/dayfile-${{ matrix.target }}.exe
           else
-            cp target/${{ matrix.target }}/release/journal out/journal-${{ matrix.target }}
+            cp target/${{ matrix.target }}/release/dayfile out/dayfile-${{ matrix.target }}
           fi
       - uses: softprops/action-gh-release@v2
         with:

@@ -1,26 +1,26 @@
 {
   "manifest_version": "0.3",
-  "name": "journal",
-  "display_name": "Journal",
+  "name": "dayfile",
+  "display_name": "Dayfile",
   "version": "__VERSION__",
   "description": "Read and write your Markdown-file journal: search, On This Day, append to today.",
-  "long_description": "Journal keeps entries as plain Markdown files in a folder you own. This extension runs the bundled `journal` CLI as an MCP server over stdio with 11 tools (list, search, get, on_this_day, entries_on_date, tags, journals, create, append_to_today, update, delete). It uses the folder the Journal desktop app is set to, or ~/Journal.",
+  "long_description": "Dayfile keeps entries as plain Markdown files in a folder you own. This extension runs the bundled `dayfile` CLI as an MCP server over stdio with 11 tools (list, search, get, on_this_day, entries_on_date, tags, journals, create, append_to_today, update, delete). It uses the folder the Dayfile desktop app is set to, or ~/Journal.",
   "author": { "name": "Jinhyuk Sung", "url": "https://github.com/sjh9714" },
-  "repository": { "type": "git", "url": "https://github.com/sjh9714/journal" },
-  "homepage": "https://github.com/sjh9714/journal",
-  "documentation": "https://github.com/sjh9714/journal/blob/main/docs/mcp.md",
+  "repository": { "type": "git", "url": "https://github.com/sjh9714/dayfile" },
+  "homepage": "https://github.com/sjh9714/dayfile",
+  "documentation": "https://github.com/sjh9714/dayfile/blob/main/docs/mcp.md",
   "license": "MIT",
   "keywords": ["journal", "diary", "markdown", "day one", "notes"],
   "server": {
     "type": "binary",
-    "entry_point": "server/journal-darwin",
+    "entry_point": "server/dayfile-darwin",
     "mcp_config": {
-      "command": "${__dirname}/server/journal-darwin",
+      "command": "${__dirname}/server/dayfile-darwin",
       "args": ["mcp", "serve"],
       "env": {},
       "platform_overrides": {
-        "win32": { "command": "${__dirname}/server/journal-win.exe" },
-        "linux": { "command": "${__dirname}/server/journal-linux" }
+        "win32": { "command": "${__dirname}/server/dayfile-win.exe" },
+        "linux": { "command": "${__dirname}/server/dayfile-linux" }
       }
     }
   },

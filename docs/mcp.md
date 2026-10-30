@@ -1,10 +1,10 @@
 # MCP server
 
-`journal mcp serve` speaks MCP over stdio. Add `--read-only` to expose only
+`dayfile mcp serve` speaks MCP over stdio. Add `--read-only` to expose only
 read tools, `--root <dir>` to point at a journal other than `~/Journal`.
 
 ```sh
-claude mcp add journal -- journal mcp serve
+claude mcp add dayfile -- dayfile mcp serve
 claude mcp add journal -- journal --root ~/Dropbox/Journal mcp serve --read-only
 ```
 

@@ -14,7 +14,7 @@ TAG="${1:?usage: $0 <tag>}"
 VERSION="${TAG#v}"
 IDENTITY="${APPLE_SIGNING_IDENTITY:-$(security find-identity -v -p codesigning | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')}"
 PROFILE="${NOTARY_PROFILE:-journal}"
-REPO="${GITHUB_REPO:-sjh9714/journal}"
+REPO="${GITHUB_REPO:-sjh9714/dayfile}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BASE="https://github.com/$REPO/releases/download/$TAG"
 
@@ -36,7 +36,7 @@ for target in aarch64-apple-darwin x86_64-apple-darwin; do
   rustup target add "$target" >/dev/null 2>&1 || true
   APPLE_SIGNING_IDENTITY="$IDENTITY" npm run -s tauri build -- --target "$target" >/dev/null
   dmg=$(ls "$ROOT/target/$target/release/bundle/dmg/"*.dmg | head -1)
-  codesign --verify --strict "$ROOT/target/$target/release/bundle/macos/Journal.app"
+  codesign --verify --strict "$ROOT/target/$target/release/bundle/macos/Dayfile.app"
   notarize "$dmg" && [ "$NOTARIZE" = 1 ] && xcrun stapler staple "$dmg" >/dev/null
   DMGS+=("$dmg")
 done
@@ -46,27 +46,27 @@ cd "$ROOT"
 work=$(mktemp -d)
 CLIS=()
 for target in aarch64-apple-darwin x86_64-apple-darwin; do
-  cargo build -q --release -p journal-cli --target "$target"
-  out="$work/journal-$target"
-  cp "target/$target/release/journal" "$out"
+  cargo build -q --release -p dayfile-cli --target "$target"
+  out="$work/dayfile-$target"
+  cp "target/$target/release/dayfile" "$out"
   codesign --force --options runtime --timestamp --sign "$IDENTITY" "$out"
   CLIS+=("$out")
 done
 if [ "$NOTARIZE" = 1 ]; then
-  (cd "$work" && zip -q cli.zip journal-aarch64-apple-darwin journal-x86_64-apple-darwin)
+  (cd "$work" && zip -q cli.zip dayfile-aarch64-apple-darwin dayfile-x86_64-apple-darwin)
   notarize "$work/cli.zip"   # bare binaries cannot be stapled; the ticket is checked online
 fi
 
 # ---- .mcpb bundle (universal mac binary + linux + windows from the release) ----
 mkdir -p "$work/mcpb/server"
-lipo -create "${CLIS[@]}" -output "$work/mcpb/server/journal-darwin"
-codesign --force --options runtime --timestamp --sign "$IDENTITY" "$work/mcpb/server/journal-darwin"
-curl -sSL "$BASE/journal-x86_64-unknown-linux-gnu" -o "$work/mcpb/server/journal-linux"
-curl -sSL "$BASE/journal-x86_64-pc-windows-msvc.exe" -o "$work/mcpb/server/journal-win.exe"
+lipo -create "${CLIS[@]}" -output "$work/mcpb/server/dayfile-darwin"
+codesign --force --options runtime --timestamp --sign "$IDENTITY" "$work/mcpb/server/dayfile-darwin"
+curl -sSL "$BASE/dayfile-x86_64-unknown-linux-gnu" -o "$work/mcpb/server/dayfile-linux"
+curl -sSL "$BASE/dayfile-x86_64-pc-windows-msvc.exe" -o "$work/mcpb/server/dayfile-win.exe"
 chmod +x "$work/mcpb/server/"*
 sed "s/__VERSION__/$VERSION/g" "$ROOT/packaging/mcpb/manifest.json" > "$work/mcpb/manifest.json"
-(cd "$work/mcpb" && zip -qr "../journal-$VERSION.mcpb" manifest.json server)
-MCPB="$work/journal-$VERSION.mcpb"
+(cd "$work/mcpb" && zip -qr "../dayfile-$VERSION.mcpb" manifest.json server)
+MCPB="$work/dayfile-$VERSION.mcpb"
 
 # ---- upload ----
 gh release upload "$TAG" --repo "$REPO" --clobber "${DMGS[@]}" "${CLIS[@]}" "$MCPB"

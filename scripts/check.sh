@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 command -v cargo >/dev/null || export PATH="$HOME/.cargo/bin:$PATH"
 
 exclude=()
-[[ "${1:-}" == "--ci" ]] && exclude=(--exclude journal-desktop)
+[[ "${1:-}" == "--ci" ]] && exclude=(--exclude dayfile-desktop)
 
 cargo test --workspace ${exclude[@]+"${exclude[@]}"}
 cargo clippy --workspace --all-targets ${exclude[@]+"${exclude[@]}"} -- -D warnings

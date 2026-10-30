@@ -11,7 +11,7 @@ struct Client {
 
 impl Client {
     fn spawn(root: &std::path::Path, extra: &[&str]) -> Self {
-        let mut cmd = Command::new(env!("CARGO_BIN_EXE_journal"));
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_dayfile"));
         cmd.arg("--root").arg(root).arg("mcp").arg("serve").args(extra);
         // The server derives new entries' zone from the environment; pin it so the
         // assertions hold on any CI runner.
@@ -25,7 +25,7 @@ impl Client {
             "capabilities": {},
             "clientInfo": {"name": "test", "version": "0"}
         }));
-        assert_eq!(init["serverInfo"]["name"], "journal");
+        assert_eq!(init["serverInfo"]["name"], "dayfile");
         assert!(init["capabilities"]["tools"].is_object());
         c.notify("notifications/initialized", json!({}));
         c
@@ -77,9 +77,9 @@ impl Drop for Client {
 
 fn fresh_root() -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempfile::TempDir::new().unwrap();
-    std::env::set_var("JOURNAL_INDEX_DIR", dir.path().join("idx"));
+    std::env::set_var("DAYFILE_INDEX_DIR", dir.path().join("idx"));
     let root = dir.path().join("Journal");
-    let st = Command::new(env!("CARGO_BIN_EXE_journal")).arg("--root").arg(&root).arg("init").status().unwrap();
+    let st = Command::new(env!("CARGO_BIN_EXE_dayfile")).arg("--root").arg(&root).arg("init").status().unwrap();
     assert!(st.success());
     (dir, root)
 }

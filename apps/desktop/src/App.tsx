@@ -110,7 +110,7 @@ export default function App() {
       let ok = await isPermissionGranted();
       if (!ok) ok = (await requestPermission()) === "granted";
       report("warn", `reminder ${r.time}: permission=${ok}`);
-      if (ok) sendNotification({ title: "Journal", body: "No entry yet today. A line is enough." });
+      if (ok) sendNotification({ title: "Dayfile", body: "No entry yet today. A line is enough." });
     };
     const t = window.setInterval(tick, 60_000);
     return () => window.clearInterval(t);

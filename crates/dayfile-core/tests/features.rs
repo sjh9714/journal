@@ -1,10 +1,10 @@
 use chrono::NaiveDate;
-use journal_core::{ListFilter, NewEntry, Store};
+use dayfile_core::{ListFilter, NewEntry, Store};
 use tempfile::TempDir;
 
 fn tmp_store() -> (TempDir, Store) {
     let dir = TempDir::new().unwrap();
-    std::env::set_var("JOURNAL_INDEX_DIR", dir.path().join("index"));
+    std::env::set_var("DAYFILE_INDEX_DIR", dir.path().join("index"));
     let store = Store::init(dir.path().join("Journal")).unwrap();
     (dir, store)
 }
@@ -42,7 +42,7 @@ fn trash_purge_and_empty_and_permanent() {
     store.delete(&a.meta.uuid).unwrap();
     store.delete(&b.meta.uuid).unwrap();
     // Backdate a's trash file name by 40 days.
-    let dir = store.root().join(".journal/trash");
+    let dir = store.root().join(".dayfile/trash");
     let old = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).find(|e| e.file_name().to_string_lossy().contains(&a.meta.uuid[..8])).unwrap();
     let name = old.file_name().to_string_lossy().into_owned();
     let (ts, rest) = name.split_once("__").unwrap();
@@ -125,4 +125,20 @@ fn stats_streak_counts_words() {
     assert_eq!(s.words, 5 + 2 + 3 + 1 + 2); // CJK chars count one each
     assert_eq!(s.first_entry, NaiveDate::from_ymd_opt(2025, 1, 1));
     assert_eq!(s.last_entry, NaiveDate::from_ymd_opt(2026, 10, 29));
+}
+
+#[test]
+fn folder_from_before_the_rename_keeps_its_trash() {
+    let dir = TempDir::new().unwrap();
+    std::env::set_var("DAYFILE_INDEX_DIR", dir.path().join("index"));
+    let root = dir.path().join("Old");
+    std::fs::create_dir_all(root.join("entries")).unwrap();
+    std::fs::create_dir_all(root.join(".journal/trash")).unwrap();
+    std::fs::write(root.join(".journal/journal.toml"), "format = 1\n").unwrap();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    std::fs::write(root.join(format!(".journal/trash/{now}__2026-01-01-abcdef12.md")), "---\nuuid: abcdef12-0000-0000-0000-000000000000\ncreated: 2026-01-01T09:00:00+00:00\ntimezone: UTC\n---\nold\n").unwrap();
+    let store = Store::open(&root).unwrap();
+    assert!(!root.join(".journal").exists());
+    assert!(root.join(".dayfile/dayfile.toml").exists());
+    assert_eq!(store.trash_list().unwrap().len(), 1);
 }
