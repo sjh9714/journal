@@ -337,18 +337,13 @@ fn plain_words(s: &str) -> String {
     spaced.split_whitespace().filter(|w| !linkish(w)).collect::<Vec<_>>().join(" ")
 }
 
-/// Anything a linkifier could turn into a link: emails, `scheme:`, and
-/// `name.tld` domains. Times (`10:30`) and versions (`v1.2`) stay.
+/// Anything a linkifier could turn into a link. Deliberately blunt: any `@`,
+/// any `:` outside a time like 10:30, any `.` followed by a letter.
 fn linkish(w: &str) -> bool {
-    if w.contains('@') {
-        return true;
-    }
-    let colon = w.char_indices().any(|(i, c)| c == ':' && !w[i + 1..].starts_with(|n: char| n.is_ascii_digit()));
-    let domain = w.split(['/', '?', '#']).next().unwrap_or(w).rsplit_once('.').is_some_and(|(host, tld)| {
-        let tld = tld.trim_end_matches(|c: char| !c.is_alphanumeric());
-        !host.is_empty() && host.chars().last().is_some_and(|c| c.is_alphanumeric()) && tld.len() >= 2 && tld.chars().all(|c| c.is_ascii_alphabetic())
-    });
-    colon || domain
+    let chars: Vec<char> = w.chars().collect();
+    w.contains('@')
+        || (w.contains(':') && !w.chars().all(|c| c.is_ascii_digit() || c == ':'))
+        || chars.windows(2).any(|p| p[0] == '.' && p[1].is_alphabetic())
 }
 
 
@@ -426,8 +421,8 @@ mod tests {
     #[test]
     fn event_titles_lose_anything_link_like() {
         assert_eq!(plain_words("![x](https://evil.example/p.png) [Call](https://evil.example)"), "x Call");
-        assert_eq!(plain_words("Sync with a@evil.com at evil.com/x or evil.co"), "Sync with at or");
+        assert_eq!(plain_words("Sync with a@evil.com at evil.com/x or evil.co, EVIL.CO:8080/x localhost:3000 www.x.org 例え.テスト"), "Sync with at or");
         assert_eq!(plain_words("mailto:me javascript:alert(1) www.evil.example"), "1");
-        assert_eq!(plain_words("Standup 10:30 v1.2 release U.S. trip 회의.준비"), "Standup 10:30 v1.2 release U.S. trip 회의.준비");
+        assert_eq!(plain_words("Standup 10:30 v1.2 release 3.5h 회의 준비"), "Standup 10:30 v1.2 release 3.5h 회의 준비");
     }
 }
