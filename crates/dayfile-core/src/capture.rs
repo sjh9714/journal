@@ -162,6 +162,14 @@ impl Store {
     }
 }
 
+fn clip(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        format!("{}…", s.chars().take(max - 1).collect::<String>().trim_end())
+    }
+}
+
 fn hm(t: DateTime<Tz>) -> String {
     t.format("%H:%M").to_string()
 }
@@ -185,7 +193,7 @@ fn render_lines(commits: &[Commit], events: &[Event], photos: &[Photo]) -> Vec<S
         cs.sort_by_key(|c| c.at);
         let (first, last) = (cs[0].at, cs[cs.len() - 1].at);
         let when = if first == last { hm(first) } else { format!("{}–{}", hm(first), hm(last)) };
-        let shown: Vec<&str> = cs.iter().take(3).map(|c| c.subject.as_str()).collect();
+        let shown: Vec<String> = cs.iter().take(3).map(|c| clip(&c.subject, 60)).collect();
         let more = if cs.len() > 3 { format!("; +{} more", cs.len() - 3) } else { String::new() };
         let n = if cs.len() == 1 { "1 commit".to_string() } else { format!("{} commits", cs.len()) };
         lines.push((first.timestamp(), format!("- {when} · {repo} · {n} ({}{more})", shown.join("; "))));

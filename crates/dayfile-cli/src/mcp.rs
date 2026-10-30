@@ -3,12 +3,13 @@
 use anyhow::{anyhow, Result};
 use chrono::NaiveDate;
 use dayfile_core::store::EntryPatch;
-use dayfile_core::{today, Entry, EntrySummary, ListFilter, NewEntry, Store};
+use dayfile_core::{today, CaptureConfig, CaptureReport, Entry, EntrySummary, ListFilter, NewEntry, NewFact, Recall, Store, TopicFact};
+use rmcp::handler::server::router::prompt::PromptRouter;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::{Json, Parameters};
-use rmcp::model::{ErrorData, Implementation, ServerCapabilities, ServerConfig};
+use rmcp::model::{ErrorData, Implementation, PromptMessage, Role, ServerCapabilities, ServerConfig};
 use rmcp::transport::stdio;
-use rmcp::{tool, tool_handler, tool_router, ServerHandler, ServiceExt};
+use rmcp::{prompt, prompt_handler, prompt_router, tool, tool_handler, tool_router, ServerHandler, ServiceExt};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
@@ -17,7 +18,9 @@ use std::sync::{Arc, Mutex};
 pub struct JournalServer {
     store: Arc<Mutex<Store>>,
     read_only: bool,
+    capture: CaptureConfig,
     tool_router: ToolRouter<Self>,
+    prompt_router: PromptRouter<Self>,
 }
 
 // ---------- outputs ----------
@@ -35,6 +38,8 @@ pub struct EntryOut {
     pub title: String,
     /// Path relative to the journal root.
     pub path: String,
+    /// Captured and not yet reviewed by the user.
+    pub draft: bool,
 }
 
 impl From<EntrySummary> for EntryOut {
@@ -48,6 +53,7 @@ impl From<EntrySummary> for EntryOut {
             starred: s.starred,
             title: s.title,
             path: s.path.to_string_lossy().into_owned(),
+            draft: s.draft,
         }
     }
 }
@@ -176,6 +182,107 @@ pub struct DeleteParams {
     pub id: String,
 }
 
+#[derive(Serialize, JsonSchema)]
+pub struct FactOut {
+    pub id: String,
+    pub topic: String,
+    pub text: String,
+    /// YYYY-MM-DD the fact became true, if known.
+    pub valid_from: Option<String>,
+    /// YYYY-MM-DD it stopped being true (exclusive), if it has.
+    pub valid_to: Option<String>,
+    /// When the journal learned it (RFC 3339).
+    pub recorded_at: String,
+    /// When it was found never true, if it was.
+    pub retracted_at: Option<String>,
+    /// uuid of the entry it came from.
+    pub source: Option<String>,
+    pub replaces: Vec<String>,
+}
+
+impl From<TopicFact> for FactOut {
+    fn from(t: TopicFact) -> Self {
+        let f = t.fact;
+        Self {
+            id: f.id,
+            topic: t.topic,
+            text: f.text,
+            valid_from: f.valid_from.map(|d| d.to_string()),
+            valid_to: f.valid_to.map(|d| d.to_string()),
+            recorded_at: f.recorded_at.to_rfc3339(),
+            retracted_at: f.retracted_at.map(|d| d.to_rfc3339()),
+            source: f.source,
+            replaces: f.replaces,
+        }
+    }
+}
+
+#[derive(Serialize, JsonSchema)]
+pub struct CaptureOut {
+    pub date: String,
+    /// Traces new to the journal in this run.
+    pub added: usize,
+    pub commits: usize,
+    pub events: usize,
+    pub photos: usize,
+    /// The day's draft, if there is one; read it with get_entry.
+    pub draft: Option<EntryOut>,
+    pub created: bool,
+    /// Sources that failed; the others still ran.
+    pub errors: Vec<String>,
+}
+
+impl From<CaptureReport> for CaptureOut {
+    fn from(r: CaptureReport) -> Self {
+        Self { date: r.date.to_string(), added: r.added, commits: r.commits, events: r.events, photos: r.photos, draft: r.draft.map(Into::into), created: r.created, errors: r.errors }
+    }
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct RememberParams {
+    /// Short subject the fact belongs to, e.g. "Home", "Work", "Minji", "Health".
+    pub topic: String,
+    /// One self-contained statement, e.g. "Works at Acme as a backend intern".
+    pub text: String,
+    /// YYYY-MM-DD the fact became true, if known.
+    pub valid_from: Option<String>,
+    /// uuid of the entry the fact comes from.
+    pub source: Option<String>,
+    /// Ids of facts this one supersedes (from recall); they end at valid_from.
+    #[serde(default)]
+    pub replaces: Vec<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct RecallParams {
+    /// Only this topic.
+    pub topic: Option<String>,
+    /// Case-insensitive text to look for.
+    pub query: Option<String>,
+    /// YYYY-MM-DD: facts true on that day. Defaults to today.
+    pub as_of: Option<String>,
+    /// RFC 3339: answer with what the journal knew at that moment.
+    pub known_at: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct TopicParams {
+    pub topic: String,
+}
+
+#[derive(Serialize, JsonSchema)]
+pub struct TopicCount {
+    pub topic: String,
+    /// Facts holding today.
+    pub current: usize,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct DayPromptArgs {
+    /// YYYY-MM-DD, default today.
+    pub date: Option<String>,
+}
+
 fn internal(e: impl std::fmt::Display) -> ErrorData {
     ErrorData::internal_error(e.to_string(), None)
 }
@@ -194,8 +301,8 @@ fn clamp(limit: Option<usize>) -> usize {
 
 #[tool_router(router = tool_router)]
 impl JournalServer {
-    pub fn new(store: Store, read_only: bool) -> Self {
-        Self { store: Arc::new(Mutex::new(store)), read_only, tool_router: Self::tool_router() }
+    pub fn new(store: Store, read_only: bool, capture: CaptureConfig) -> Self {
+        Self { store: Arc::new(Mutex::new(store)), read_only, capture, tool_router: Self::tool_router(), prompt_router: Self::prompt_router() }
     }
 
     fn guard_write(&self) -> Result<(), ErrorData> {
@@ -315,25 +422,121 @@ impl JournalServer {
         let e = self.lock().delete(&p.0.id).map_err(bad)?;
         Ok(Json(e.summary().into()))
     }
+
+    #[tool(description = "Draft a day (default today) from the user's git commits, calendar events and photos. Adds only traces no entry holds yet; returns the draft. Drafts are hidden from list and search until accepted.")]
+    async fn capture_day(&self, p: Parameters<DateParams>) -> Result<Json<CaptureOut>, ErrorData> {
+        self.guard_write()?;
+        if self.capture.is_empty() {
+            return Err(ErrorData::invalid_request("no capture sources configured; the user adds them in the app's Settings or with `dayfile sources add`", None));
+        }
+        let d = parse_date(p.0.date)?;
+        Ok(Json(self.lock().capture(d, &self.capture).map_err(internal)?.into()))
+    }
+
+    #[tool(description = "Captured drafts waiting for the user's review, newest first.")]
+    async fn list_drafts(&self) -> Result<Json<Vec<EntryOut>>, ErrorData> {
+        let rows = self.lock().drafts().map_err(internal)?;
+        Ok(Json(rows.into_iter().map(Into::into).collect()))
+    }
+
+    #[tool(description = "Keep a draft as an ordinary entry. Only when the user asks to keep it.")]
+    async fn accept_draft(&self, p: Parameters<GetParams>) -> Result<Json<FullEntryOut>, ErrorData> {
+        self.guard_write()?;
+        Ok(Json(self.lock().accept_draft(&p.0.id).map_err(bad)?.into()))
+    }
+
+    #[tool(description = "Record a durable fact about the user's life (people, places, work, health, plans) in their memory. Call recall first; pass replaces when the fact updates an earlier one so history stays correct.")]
+    async fn remember(&self, p: Parameters<RememberParams>) -> Result<Json<FactOut>, ErrorData> {
+        self.guard_write()?;
+        let p = p.0;
+        let valid_from = p.valid_from.map(|s| NaiveDate::parse_from_str(&s, "%Y-%m-%d")).transpose().map_err(bad)?;
+        let mut store = self.lock();
+        let source = p.source.map(|s| store.get(&s).map(|e| e.meta.uuid)).transpose().map_err(bad)?;
+        Ok(Json(store.remember(NewFact { topic: p.topic, text: p.text, valid_from, source, replaces: p.replaces }).map_err(bad)?.into()))
+    }
+
+    #[tool(description = "Facts from the user's memory that hold on a date (default today). known_at answers with what the journal believed at that moment. Each fact cites its source entry.")]
+    async fn recall(&self, p: Parameters<RecallParams>) -> Result<Json<Vec<FactOut>>, ErrorData> {
+        let p = p.0;
+        let as_of = p.as_of.map(|s| NaiveDate::parse_from_str(&s, "%Y-%m-%d")).transpose().map_err(bad)?;
+        let known_at = p.known_at.map(|s| chrono::DateTime::parse_from_rfc3339(&s)).transpose().map_err(bad)?;
+        Ok(Json(self.lock().recall(&Recall { topic: p.topic, query: p.query, as_of, known_at }).map_err(internal)?.into_iter().map(Into::into).collect()))
+    }
+
+    #[tool(description = "Every fact of a topic over time, including ended and retracted ones, oldest first.")]
+    async fn fact_history(&self, p: Parameters<TopicParams>) -> Result<Json<Vec<FactOut>>, ErrorData> {
+        Ok(Json(self.lock().fact_history(&p.0.topic).map_err(internal)?.into_iter().map(Into::into).collect()))
+    }
+
+    #[tool(description = "Memory topics with how many facts hold today.")]
+    async fn list_topics(&self) -> Result<Json<Vec<TopicCount>>, ErrorData> {
+        let rows = self.lock().topics().map_err(internal)?;
+        Ok(Json(rows.into_iter().map(|(topic, current)| TopicCount { topic, current }).collect()))
+    }
+
+    #[tool(description = "Mark a fact as never true (a mistake). It stays in history. To record a change over time use remember with replaces instead.")]
+    async fn retract_fact(&self, p: Parameters<GetParams>) -> Result<Json<FactOut>, ErrorData> {
+        self.guard_write()?;
+        Ok(Json(self.lock().retract(&p.0.id).map_err(bad)?.into()))
+    }
+}
+
+#[prompt_router]
+impl JournalServer {
+    #[prompt(name = "review_day", description = "Turn a captured day into a journal entry and update memory from it.")]
+    async fn review_day(&self, p: Parameters<DayPromptArgs>) -> Result<Vec<PromptMessage>, ErrorData> {
+        let date = parse_date(p.0.date)?;
+        Ok(vec![PromptMessage::new_text(
+            Role::User,
+            format!(
+                "Help me write up {date} in my journal.\n\
+                 1. Call capture_day for {date}, then get_entry on the draft it returns. Also read entries_on_date for {date}.\n\
+                 2. Ask me two or three short questions about the day that the draft cannot answer (how it felt, what mattered).\n\
+                 3. Rewrite the draft as a first-person entry in the language I answer in. Keep every time, name and number from the draft; add my answers. Save it with update_entry. Do not call accept_draft until I say the entry is right.\n\
+                 4. Then pull out durable facts about my life (people, places, work, health, plans). For each, call recall to find what memory already says, and call remember with source set to the entry id and replaces set when it updates an older fact. Skip passing moods and one-off events.\n\
+                 5. Finish with a short list of what you remembered."
+            ),
+        )])
+    }
+
+    #[prompt(name = "weekly_review", description = "Look back over the last seven days and what changed in memory.")]
+    async fn weekly_review(&self, p: Parameters<DayPromptArgs>) -> Result<Vec<PromptMessage>, ErrorData> {
+        let end = parse_date(p.0.date)?;
+        let start = end - chrono::Duration::days(6);
+        let week_ago = start.and_hms_opt(0, 0, 0).unwrap();
+        Ok(vec![PromptMessage::new_text(
+            Role::User,
+            format!(
+                "Review my week from {start} to {end}.\n\
+                 Use list_entries with from={start} and to={end}, read the entries with get_entry, and check list_drafts for days I have not reviewed. \
+                 Compare recall (today) with recall using known_at={week_ago}+00:00 to see what changed in my life this week. \
+                 Write: what I spent time on, what moved forward, what I said I would follow up on, and what changed in memory. \
+                 Cite entries by date. Do not write anything to the journal unless I ask."
+            ),
+        )])
+    }
 }
 
 #[tool_handler(router = self.tool_router)]
+#[prompt_handler(router = self.prompt_router)]
 impl ServerHandler for JournalServer {
     fn get_info(&self) -> ServerConfig {
         let mode = if self.read_only { "read-only" } else { "read-write" };
-        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().enable_prompts().build())
             .with_server_info(Implementation::new("dayfile", env!("CARGO_PKG_VERSION")))
             .with_instructions(format!(
-            "Personal journal stored as Markdown files ({mode}). Use search_entries or list_entries to find entries, \
-             get_entry for a full body, on_this_day for anniversaries, and append_to_today to add to today's entry. \
+            "The user's journal and long-term memory, stored as Markdown files they own ({mode}). \
+             Entries: search_entries or list_entries to find them, get_entry for a full body, on_this_day for anniversaries, append_to_today to add a line. \
+             Days: capture_day drafts a day from git, calendar and photos; drafts wait for the user's review. \
+             Memory: recall before answering questions about the user's life; remember durable facts with their source entry, and pass replaces when a fact changes. \
              Dates are YYYY-MM-DD in the user's local timezone."
         ))
     }
 }
 
 /// Run the server on stdin/stdout until the client disconnects.
-pub async fn serve(store: Store, read_only: bool) -> Result<()> {
-    let service = JournalServer::new(store, read_only).serve(stdio()).await.map_err(|e| anyhow!("mcp: {e}"))?;
+pub async fn serve(store: Store, read_only: bool, capture: CaptureConfig) -> Result<()> {
+    let service = JournalServer::new(store, read_only, capture).serve(stdio()).await.map_err(|e| anyhow!("mcp: {e}"))?;
     service.waiting().await?;
     Ok(())
 }

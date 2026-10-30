@@ -3,7 +3,7 @@
 
 use chrono::NaiveDate;
 use dayfile_core::store::{EntryPatch, ReindexStats};
-use dayfile_core::{import_dayone, Drafts, Entry, EntrySummary, ImportOptions, ImportReport, ListFilter, NewEntry, Problem, Stats, Store, Template, TrashedEntry};
+use dayfile_core::{import_dayone, CaptureConfig, Drafts, Entry, EntrySummary, ImportOptions, ImportReport, ListFilter, NewEntry, Problem, Stats, Store, Template, TrashedEntry};
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use rand_core::OsRng;
 use argon2::Argon2;
@@ -27,6 +27,9 @@ struct Config {
     lock: Option<LockConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     reminder: Option<ReminderConfig>,
+    /// Shared with the CLI (`dayfile sources`).
+    #[serde(default, skip_serializing_if = "CaptureConfig::is_empty")]
+    capture: CaptureConfig,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

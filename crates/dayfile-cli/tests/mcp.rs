@@ -16,6 +16,8 @@ impl Client {
         // The server derives new entries' zone from the environment; pin it so the
         // assertions hold on any CI runner.
         cmd.env("TZ", "Asia/Seoul");
+        // Never the developer's real app config: capture sources come from here.
+        cmd.env("DAYFILE_CONFIG", root.parent().unwrap().join("config.json"));
         cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit());
         let mut child = cmd.spawn().unwrap();
         let reader = BufReader::new(child.stdout.take().unwrap());
@@ -91,7 +93,7 @@ fn tools_roundtrip_over_stdio() {
 
     let tools = c.request("tools/list", json!({}));
     let names: Vec<&str> = tools["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-    for expected in ["list_entries", "get_entry", "search_entries", "on_this_day", "entries_on_date", "list_tags", "list_journals", "create_entry", "append_to_today", "update_entry", "delete_entry"] {
+    for expected in ["list_entries", "get_entry", "search_entries", "on_this_day", "entries_on_date", "list_tags", "list_journals", "create_entry", "append_to_today", "update_entry", "delete_entry", "capture_day", "list_drafts", "accept_draft", "remember", "recall", "fact_history", "list_topics", "retract_fact"] {
         assert!(names.contains(&expected), "missing tool {expected}: {names:?}");
     }
     let create = tools["tools"].as_array().unwrap().iter().find(|t| t["name"] == "create_entry").unwrap();
@@ -142,4 +144,53 @@ fn read_only_blocks_writes() {
     assert!(r.get("error").is_some() || r.get("toolError").is_some(), "{r}");
     let listed = c.call("list_entries", json!({}));
     assert_eq!(listed, json!([]));
+}
+
+#[test]
+fn capture_and_memory_over_stdio() {
+    let (dir, root) = fresh_root();
+    // A daily all-day event, so it is on the calendar whatever day the test runs.
+    let ics = dir.path().join("cal.ics");
+    std::fs::write(&ics, "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:walk\nSUMMARY:Morning walk\nDTSTART;VALUE=DATE:20200101\nRRULE:FREQ=DAILY\nEND:VEVENT\nEND:VCALENDAR\n").unwrap();
+    std::fs::write(dir.path().join("config.json"), json!({"capture": {"calendars": [ics]}}).to_string()).unwrap();
+    let mut c = Client::spawn(&root, &[]);
+
+    let prompts = c.request("prompts/list", json!({}));
+    let names: Vec<&str> = prompts["prompts"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap()).collect();
+    assert_eq!(names.len(), 2, "{names:?}");
+    assert!(names.contains(&"review_day") && names.contains(&"weekly_review"));
+    let got = c.request("prompts/get", json!({"name": "review_day", "arguments": {"date": "2026-10-28"}}));
+    assert!(got["messages"][0]["content"]["text"].as_str().unwrap().contains("capture_day for 2026-10-28"), "{got}");
+
+    let cap = c.call("capture_day", json!({}));
+    assert_eq!((cap["events"].clone(), cap["created"].clone()), (json!(1), json!(true)), "{cap}");
+    assert_eq!(cap["draft"]["draft"], true);
+    assert_eq!(cap["draft"]["title"], "Morning walk");
+    let id = cap["draft"]["uuid"].as_str().unwrap().to_string();
+    assert_eq!(c.call("list_drafts", json!({})).as_array().unwrap().len(), 1);
+    assert_eq!(c.call("list_entries", json!({})), json!([]), "drafts stay out of listings");
+    assert_eq!(c.call("capture_day", json!({}))["added"], 0);
+    c.call("accept_draft", json!({"id": id}));
+    assert_eq!(c.call("list_entries", json!({})).as_array().unwrap().len(), 1);
+
+    let busan = c.call("remember", json!({"topic": "Home", "text": "Lives in Busan", "valid_from": "2019-01-01", "source": &id[..8]}));
+    assert_eq!(busan["source"], id, "prefix resolves to the entry uuid");
+    let seoul = c.call("remember", json!({"topic": "Home", "text": "Lives in Seoul", "valid_from": "2024-03-01", "replaces": [busan["id"]]}));
+    assert_eq!(seoul["replaces"], json!([busan["id"]]));
+    assert_eq!(c.call("recall", json!({"topic": "Home"}))[0]["text"], "Lives in Seoul");
+    assert_eq!(c.call("recall", json!({"topic": "Home", "as_of": "2023-01-01"}))[0]["text"], "Lives in Busan");
+    assert_eq!(c.call("fact_history", json!({"topic": "Home"})).as_array().unwrap().len(), 2);
+    assert_eq!(c.call("list_topics", json!({})), json!([{"topic": "Home", "current": 1}]));
+    assert!(root.join("memory/home.md").exists());
+}
+
+#[test]
+fn read_only_blocks_memory_and_capture() {
+    let (_d, root) = fresh_root();
+    let mut c = Client::spawn(&root, &["--read-only"]);
+    for (tool, args) in [("remember", json!({"topic": "a", "text": "b"})), ("capture_day", json!({}))] {
+        let r = c.call(tool, args);
+        assert!(r.get("error").is_some() || r.get("toolError").is_some(), "{tool}: {r}");
+    }
+    assert_eq!(c.call("recall", json!({})), json!([]));
 }

@@ -1,10 +1,11 @@
+mod config;
 mod mcp;
 
 use anyhow::{bail, Context, Result};
 use chrono::{Local, NaiveDate};
 use clap::{Args, Parser, Subcommand};
 use dayfile_core::store::EntryPatch;
-use dayfile_core::{import_dayone, today, EntrySummary, ImportOptions, ListFilter, NewEntry, Store};
+use dayfile_core::{import_dayone, today, CaptureConfig, EntrySummary, ImportOptions, ListFilter, NewEntry, NewFact, Recall, Store, TopicFact};
 use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 
@@ -77,6 +78,28 @@ enum Cmd {
     },
     /// Print where things live.
     Info,
+    /// Draft a day from your git commits, calendar and photos (see `dayfile sources`).
+    Capture {
+        /// Day to capture, default today.
+        #[arg(long)]
+        date: Option<NaiveDate>,
+    },
+    /// Captured drafts waiting for review.
+    Drafts,
+    /// Keep a draft as an ordinary entry. Discard one with `dayfile delete`.
+    Accept { id: String },
+    /// Where capture looks: git folders, calendar feeds, photo folders.
+    Sources(SourcesArgs),
+    /// Record a fact about your life in memory/<topic>.md.
+    Remember(RememberArgs),
+    /// Facts that hold on a date (default today), optionally as known at a past moment.
+    Recall(RecallArgs),
+    /// Every fact of a topic, including ended and retracted ones.
+    History { topic: String },
+    /// Memory topics with how many facts currently hold.
+    Topics,
+    /// Mark a fact as never true. It stays in the file for history.
+    Retract { id: String },
     /// Import from another app.
     #[command(subcommand)]
     Import(ImportCmd),
@@ -103,6 +126,56 @@ enum TrashCmd {
     Restore { id: String },
     /// Permanently delete everything in the trash.
     Empty,
+}
+
+#[derive(Args)]
+struct SourcesArgs {
+    #[command(subcommand)]
+    cmd: Option<SourcesCmd>,
+}
+
+#[derive(Subcommand)]
+enum SourcesCmd {
+    /// Add a source: `git <folder>`, `calendar <.ics file or URL>`, `photos <folder>`.
+    Add { kind: SourceKind, value: String },
+    /// Remove a source.
+    Remove { kind: SourceKind, value: String },
+    /// Only capture commits by this email (default: git config user.email).
+    Author { email: String },
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum SourceKind {
+    Git,
+    Calendar,
+    Photos,
+}
+
+#[derive(Args)]
+struct RememberArgs {
+    topic: String,
+    text: Vec<String>,
+    /// Since when it is true (YYYY-MM-DD). Also where replaced facts end.
+    #[arg(long)]
+    since: Option<NaiveDate>,
+    /// Entry the fact comes from (uuid or prefix).
+    #[arg(long)]
+    source: Option<String>,
+    /// Ids of facts this one supersedes.
+    #[arg(long)]
+    replaces: Vec<String>,
+}
+
+#[derive(Args)]
+struct RecallArgs {
+    query: Vec<String>,
+    #[arg(long)]
+    topic: Option<String>,
+    #[arg(long)]
+    as_of: Option<NaiveDate>,
+    /// RFC 3339 moment: answer with what the journal knew then.
+    #[arg(long)]
+    known_at: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -171,21 +244,10 @@ struct EditArgs {
 /// --root, then $DAYFILE_ROOT (clap), then the folder the desktop app uses,
 /// then ~/Journal. Keeps `dayfile` and the app on the same journal by default.
 fn default_root() -> PathBuf {
-    if let Some(root) = desktop_app_root() {
+    if let Some(root) = config::root() {
         return root;
     }
     dirs::home_dir().map(|h| h.join("Journal")).unwrap_or_else(|| PathBuf::from("Journal"))
-}
-
-fn desktop_app_root() -> Option<PathBuf> {
-    let dir = dirs::config_dir()?;
-    // dev.journal.desktop: the app's id before the rename.
-    let text = ["dev.dayfile.app", "dev.journal.desktop"]
-        .iter()
-        .find_map(|id| std::fs::read_to_string(dir.join(id).join("config.json")).ok())?;
-    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
-    let root = PathBuf::from(v.get("root")?.as_str()?);
-    root.join("entries").is_dir().then_some(root)
 }
 
 fn main() -> Result<()> {
@@ -196,6 +258,9 @@ fn main() -> Result<()> {
         let store = Store::init(&root)?;
         println!("initialized journal at {}", store.root().display());
         return Ok(());
+    }
+    if let Cmd::Sources(a) = &cli.cmd {
+        return sources(a.cmd.as_ref(), cli.json);
     }
 
     let mut store = Store::open(&root)
@@ -250,6 +315,9 @@ fn main() -> Result<()> {
                 }
                 if m.starred {
                     println!("starred:  yes");
+                }
+                if m.is_draft() {
+                    println!("status:   draft (dayfile accept {} to keep it)", short(&m.uuid));
                 }
                 println!("file:     {}", store.root().join(&e.path).display());
                 println!();
@@ -373,13 +441,116 @@ fn main() -> Result<()> {
             }
         }
         Cmd::Mcp(McpCmd::Serve { read_only }) => {
-            tokio::runtime::Runtime::new()?.block_on(mcp::serve(store, read_only))?;
+            tokio::runtime::Runtime::new()?.block_on(mcp::serve(store, read_only, config::capture()))?;
+        }
+        Cmd::Sources(_) => unreachable!(),
+        Cmd::Capture { date } => {
+            let cfg = config::capture();
+            if cfg.is_empty() {
+                bail!("no capture sources yet. Add one, e.g. `dayfile sources add git ~/code`");
+            }
+            let r = store.capture(date.unwrap_or_else(today), &cfg)?;
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&r)?);
+            } else {
+                for e in &r.errors {
+                    eprintln!("warning: {e}");
+                }
+                match &r.draft {
+                    Some(d) if r.added > 0 => println!("{} {}  {} commits, {} events, {} photos added  {}", r.date, short(&d.uuid), r.commits, r.events, r.photos, store.root().join(&d.path).display()),
+                    Some(d) => println!("{} {}  nothing new since the last capture", r.date, short(&d.uuid)),
+                    None => println!("{}  nothing to capture", r.date),
+                }
+            }
+        }
+        Cmd::Drafts => print_summaries(&store.drafts()?, cli.json)?,
+        Cmd::Accept { id } => {
+            let e = store.accept_draft(&id)?;
+            println!("{}  kept", short(&e.meta.uuid));
+        }
+        Cmd::Remember(a) => {
+            let source = a.source.map(|s| store.get(&s).map(|e| e.meta.uuid)).transpose()?;
+            let f = store.remember(NewFact { topic: a.topic, text: text_or_stdin(a.text)?, valid_from: a.since, source, replaces: a.replaces })?;
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&f)?);
+            } else {
+                println!("{}  {}: {}", f.fact.id, f.topic, f.fact.text);
+            }
+        }
+        Cmd::Recall(a) => {
+            let known_at = a.known_at.as_deref().map(chrono::DateTime::parse_from_rfc3339).transpose()?;
+            let q = (!a.query.is_empty()).then(|| a.query.join(" "));
+            print_facts(&store.recall(&Recall { topic: a.topic, query: q, as_of: a.as_of, known_at })?, cli.json)?;
+        }
+        Cmd::History { topic } => print_facts(&store.fact_history(&topic)?, cli.json)?,
+        Cmd::Topics => {
+            for (t, n) in store.topics()? {
+                println!("{n:5}  {t}");
+            }
+        }
+        Cmd::Retract { id } => {
+            let f = store.retract(&id)?;
+            println!("{}  retracted: {}", f.fact.id, f.fact.text);
         }
         Cmd::Info => {
             println!("root:   {}", store.root().display());
             println!("index:  {}", Store::index_path(store.root()).display());
             println!("entries: {}", store.count(&ListFilter::default())?);
         }
+    }
+    Ok(())
+}
+
+fn sources(cmd: Option<&SourcesCmd>, json: bool) -> Result<()> {
+    let mut cfg: CaptureConfig = config::capture();
+    let Some(cmd) = cmd else {
+        if json {
+            println!("{}", serde_json::to_string_pretty(&cfg)?);
+        } else if cfg.is_empty() {
+            println!("no sources. Try: dayfile sources add git ~/code");
+        } else {
+            cfg.git.iter().for_each(|p| println!("git       {}", p.display()));
+            if let Some(a) = &cfg.git_author {
+                println!("author    {a}");
+            }
+            cfg.calendars.iter().for_each(|c| println!("calendar  {c}"));
+            cfg.photos.iter().for_each(|p| println!("photos    {}", p.display()));
+        }
+        return Ok(());
+    };
+    match cmd {
+        SourcesCmd::Add { kind, value } => match kind {
+            SourceKind::Git if !cfg.git.contains(&PathBuf::from(value)) => cfg.git.push(value.into()),
+            SourceKind::Calendar if !cfg.calendars.contains(value) => cfg.calendars.push(value.clone()),
+            SourceKind::Photos if !cfg.photos.contains(&PathBuf::from(value)) => cfg.photos.push(value.into()),
+            _ => {}
+        },
+        SourcesCmd::Remove { kind, value } => match kind {
+            SourceKind::Git => cfg.git.retain(|p| p != &PathBuf::from(value)),
+            SourceKind::Calendar => cfg.calendars.retain(|c| c != value),
+            SourceKind::Photos => cfg.photos.retain(|p| p != &PathBuf::from(value)),
+        },
+        SourcesCmd::Author { email } => cfg.git_author = Some(email.clone()),
+    }
+    let path = config::save_capture(&cfg)?;
+    println!("saved to {}", path.display());
+    Ok(())
+}
+
+fn print_facts(rows: &[TopicFact], json: bool) -> Result<()> {
+    if json {
+        println!("{}", serde_json::to_string_pretty(rows)?);
+        return Ok(());
+    }
+    for r in rows {
+        let f = &r.fact;
+        let span = match (f.valid_from, f.valid_to) {
+            (None, None) => String::new(),
+            (Some(a), None) => format!("  [{a} ..]"),
+            (a, Some(b)) => format!("  [{} .. {b})", a.map(|d| d.to_string()).unwrap_or_default()),
+        };
+        let gone = if f.retracted_at.is_some() { "  (retracted)" } else { "" };
+        println!("{}  {}: {}{span}{gone}", f.id, r.topic, f.text);
     }
     Ok(())
 }
