@@ -334,15 +334,23 @@ fn calendar_events(cfg: &CaptureConfig, date: NaiveDate, tz: Tz, errors: &mut Ve
 /// could become a link, an embed or formatting once it is Markdown.
 fn plain_words(s: &str) -> String {
     let spaced: String = s.chars().map(|c| if matches!(c, '[' | ']' | '(' | ')' | '<' | '>' | '`' | '*' | '_' | '#' | '!' | '|' | '~' | '\\') { ' ' } else { c }).collect();
-    spaced
-        .split_whitespace()
-        .filter(|w| {
-            let l = w.to_ascii_lowercase();
-            !(l.contains("://") || l.starts_with("www.") || l.starts_with("mailto:"))
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+    spaced.split_whitespace().filter(|w| !linkish(w)).collect::<Vec<_>>().join(" ")
 }
+
+/// Anything a linkifier could turn into a link: emails, `scheme:`, and
+/// `name.tld` domains. Times (`10:30`) and versions (`v1.2`) stay.
+fn linkish(w: &str) -> bool {
+    if w.contains('@') {
+        return true;
+    }
+    let colon = w.char_indices().any(|(i, c)| c == ':' && !w[i + 1..].starts_with(|n: char| n.is_ascii_digit()));
+    let domain = w.split(['/', '?', '#']).next().unwrap_or(w).rsplit_once('.').is_some_and(|(host, tld)| {
+        let tld = tld.trim_end_matches(|c: char| !c.is_alphanumeric());
+        !host.is_empty() && host.chars().last().is_some_and(|c| c.is_alphanumeric()) && tld.len() >= 2 && tld.chars().all(|c| c.is_ascii_alphabetic())
+    });
+    colon || domain
+}
+
 
 fn read_calendar(src: &str) -> std::result::Result<String, String> {
     let url = src.strip_prefix("webcal://").map(|r| format!("https://{r}")).unwrap_or_else(|| src.to_string());
@@ -409,4 +417,17 @@ fn exif_time(path: &Path, tz: Tz) -> Option<DateTime<Tz>> {
         }
     }
     tz.from_local_datetime(&naive).earliest()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::plain_words;
+
+    #[test]
+    fn event_titles_lose_anything_link_like() {
+        assert_eq!(plain_words("![x](https://evil.example/p.png) [Call](https://evil.example)"), "x Call");
+        assert_eq!(plain_words("Sync with a@evil.com at evil.com/x or evil.co"), "Sync with at or");
+        assert_eq!(plain_words("mailto:me javascript:alert(1) www.evil.example"), "1");
+        assert_eq!(plain_words("Standup 10:30 v1.2 release U.S. trip 회의.준비"), "Standup 10:30 v1.2 release U.S. trip 회의.준비");
+    }
 }
