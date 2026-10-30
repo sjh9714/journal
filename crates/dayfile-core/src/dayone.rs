@@ -235,6 +235,7 @@ fn import_entry(
         weather,
         extra,
         uuid: Some(uuid),
+        ..Default::default()
     })?;
     report.created += 1;
     Ok(())

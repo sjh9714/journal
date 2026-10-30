@@ -20,4 +20,6 @@ sha2.workspace = true
 dirs.workspace = true
 zip.workspace = true
 tempfile.workspace = true
+ureq.workspace = true
+kamadak-exif.workspace = true
 

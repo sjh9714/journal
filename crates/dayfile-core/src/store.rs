@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use walkdir::WalkDir;
 
-pub use crate::index::ListFilter;
+pub use crate::index::{Drafts, ListFilter};
 
 pub const ENTRIES_DIR: &str = "entries";
 pub const ATTACHMENTS_DIR: &str = "attachments";
@@ -158,6 +158,8 @@ impl Store {
             location: new.location,
             weather: new.weather,
             extra: new.extra,
+            status: new.draft.then(|| crate::entry::DRAFT.to_string()),
+            traces: new.traces,
         };
         let path = entry_rel_path(&meta);
         let entry = Entry { meta, body: normalize_body(new.body), path };
@@ -362,7 +364,7 @@ impl Store {
         Ok(stats)
     }
 
-    fn write_entry(&mut self, entry: &Entry) -> Result<()> {
+    pub(crate) fn write_entry(&mut self, entry: &Entry) -> Result<()> {
         let abs = self.root.join(&entry.path);
         if let Some(parent) = abs.parent() {
             std::fs::create_dir_all(parent)?;

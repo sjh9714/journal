@@ -3,7 +3,7 @@
 
 use chrono::NaiveDate;
 use dayfile_core::store::{EntryPatch, ReindexStats};
-use dayfile_core::{import_dayone, Entry, EntrySummary, ImportOptions, ImportReport, ListFilter, NewEntry, Problem, Stats, Store, Template, TrashedEntry};
+use dayfile_core::{import_dayone, Drafts, Entry, EntrySummary, ImportOptions, ImportReport, ListFilter, NewEntry, Problem, Stats, Store, Template, TrashedEntry};
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use rand_core::OsRng;
 use argon2::Argon2;
@@ -79,6 +79,8 @@ struct FilterDto {
     limit: Option<usize>,
     offset: Option<usize>,
     ascending: Option<bool>,
+    /// The timeline shows drafts (badged) alongside entries.
+    include_drafts: Option<bool>,
 }
 
 impl From<FilterDto> for ListFilter {
@@ -92,6 +94,7 @@ impl From<FilterDto> for ListFilter {
             limit: f.limit,
             offset: f.offset.unwrap_or(0),
             ascending: f.ascending.unwrap_or(false),
+            drafts: if f.include_drafts.unwrap_or(false) { Drafts::Include } else { Drafts::Exclude },
         }
     }
 }

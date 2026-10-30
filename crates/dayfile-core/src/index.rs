@@ -13,7 +13,7 @@ pub struct Index {
 
 /// Bump when derived columns (title, words, …) change meaning; the index is
 /// then rebuilt from the files on next open.
-const INDEX_VERSION: i64 = 2;
+const INDEX_VERSION: i64 = 3;
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS entries (
@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS entries (
     tags        TEXT NOT NULL DEFAULT '[]',
     title       TEXT NOT NULL DEFAULT '',
     mtime       INTEGER NOT NULL,
-    words       INTEGER NOT NULL DEFAULT 0
+    words       INTEGER NOT NULL DEFAULT 0,
+    status      TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_entries_created ON entries(created_utc DESC);
 CREATE INDEX IF NOT EXISTS idx_entries_md ON entries(month, day);
@@ -42,6 +43,12 @@ CREATE TABLE IF NOT EXISTS entry_tags (
     PRIMARY KEY (uuid, tag)
 );
 CREATE INDEX IF NOT EXISTS idx_entry_tags_tag ON entry_tags(tag);
+CREATE TABLE IF NOT EXISTS entry_traces (
+    uuid TEXT NOT NULL,
+    key  TEXT NOT NULL,
+    PRIMARY KEY (uuid, key)
+);
+CREATE INDEX IF NOT EXISTS idx_entry_traces_key ON entry_traces(key);
 CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
     uuid UNINDEXED, title, body, tags, tokenize = 'unicode61 remove_diacritics 2'
 );
@@ -58,6 +65,16 @@ pub struct ListFilter {
     pub offset: usize,
     /// Oldest first when true; default newest first.
     pub ascending: bool,
+    pub drafts: Drafts,
+}
+
+/// Captured drafts stay out of listings, search and stats until accepted.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Drafts {
+    #[default]
+    Exclude,
+    Include,
+    Only,
 }
 
 impl Index {
@@ -78,9 +95,10 @@ impl Index {
         conn.execute_batch(SCHEMA)?;
         // Older indexes predate the words column; adding it is idempotent enough.
         let _ = conn.execute_batch("ALTER TABLE entries ADD COLUMN words INTEGER NOT NULL DEFAULT 0");
+        let _ = conn.execute_batch("ALTER TABLE entries ADD COLUMN status TEXT NOT NULL DEFAULT ''");
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
         if version != INDEX_VERSION {
-            conn.execute_batch("DELETE FROM entries; DELETE FROM entry_tags; DELETE FROM entries_fts;")?;
+            conn.execute_batch("DELETE FROM entries; DELETE FROM entry_tags; DELETE FROM entry_traces; DELETE FROM entries_fts;")?;
             conn.execute_batch(&format!("PRAGMA user_version = {INDEX_VERSION}"))?;
         }
         Ok(Self { conn })
@@ -92,13 +110,14 @@ impl Index {
         let date = entry.local_date();
         let tags_json = serde_json::to_string(&m.tags)?;
         tx.execute(
-            "INSERT INTO entries (uuid, path, created, created_utc, date, year, month, day, timezone, journal, starred, tags, title, mtime, words)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            "INSERT INTO entries (uuid, path, created, created_utc, date, year, month, day, timezone, journal, starred, tags, title, mtime, words, status)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
              ON CONFLICT(uuid) DO UPDATE SET
                path=excluded.path, created=excluded.created, created_utc=excluded.created_utc,
                date=excluded.date, year=excluded.year, month=excluded.month, day=excluded.day,
                timezone=excluded.timezone, journal=excluded.journal, starred=excluded.starred,
-               tags=excluded.tags, title=excluded.title, mtime=excluded.mtime, words=excluded.words",
+               tags=excluded.tags, title=excluded.title, mtime=excluded.mtime, words=excluded.words,
+               status=excluded.status",
             params![
                 m.uuid,
                 rel(&entry.path),
@@ -115,6 +134,7 @@ impl Index {
                 entry.title(),
                 mtime,
                 crate::stats::count_words(&entry.body) as i64,
+                m.status.clone().unwrap_or_default(),
             ],
         )?;
         tx.execute("DELETE FROM entry_tags WHERE uuid = ?1", params![m.uuid])?;
@@ -123,6 +143,10 @@ impl Index {
                 "INSERT OR IGNORE INTO entry_tags (uuid, tag) VALUES (?1, ?2)",
                 params![m.uuid, tag],
             )?;
+        }
+        tx.execute("DELETE FROM entry_traces WHERE uuid = ?1", params![m.uuid])?;
+        for key in &m.traces {
+            tx.execute("INSERT OR IGNORE INTO entry_traces (uuid, key) VALUES (?1, ?2)", params![m.uuid, key])?;
         }
         tx.execute("DELETE FROM entries_fts WHERE uuid = ?1", params![m.uuid])?;
         tx.execute(
@@ -137,6 +161,7 @@ impl Index {
         let tx = self.conn.transaction()?;
         tx.execute("DELETE FROM entries WHERE uuid = ?1", params![uuid])?;
         tx.execute("DELETE FROM entry_tags WHERE uuid = ?1", params![uuid])?;
+        tx.execute("DELETE FROM entry_traces WHERE uuid = ?1", params![uuid])?;
         tx.execute("DELETE FROM entries_fts WHERE uuid = ?1", params![uuid])?;
         tx.commit()?;
         Ok(())
@@ -144,7 +169,7 @@ impl Index {
 
     pub fn clear(&mut self) -> Result<()> {
         self.conn
-            .execute_batch("DELETE FROM entries; DELETE FROM entry_tags; DELETE FROM entries_fts;")?;
+            .execute_batch("DELETE FROM entries; DELETE FROM entry_tags; DELETE FROM entry_traces; DELETE FROM entries_fts;")?;
         Ok(())
     }
 
@@ -180,8 +205,13 @@ impl Index {
     }
 
     pub fn list(&self, f: &ListFilter) -> Result<Vec<EntrySummary>> {
-        let mut sql = String::from("SELECT uuid, path, created, date, journal, starred, tags, title FROM entries e WHERE 1=1");
+        let mut sql = String::from("SELECT uuid, path, created, date, journal, starred, tags, title, status FROM entries e WHERE 1=1");
         let mut args: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        sql.push_str(match f.drafts {
+            Drafts::Exclude => " AND status = ''",
+            Drafts::Include => "",
+            Drafts::Only => " AND status = 'draft'",
+        });
         if let Some(j) = &f.journal {
             sql.push_str(" AND journal = ?");
             args.push(Box::new(j.clone()));
@@ -229,9 +259,9 @@ impl Index {
             return Ok(Vec::new());
         }
         let mut stmt = self.conn.prepare(
-            "SELECT e.uuid, e.path, e.created, e.date, e.journal, e.starred, e.tags, e.title
+            "SELECT e.uuid, e.path, e.created, e.date, e.journal, e.starred, e.tags, e.title, e.status
              FROM entries_fts f JOIN entries e ON e.uuid = f.uuid
-             WHERE entries_fts MATCH ?1
+             WHERE entries_fts MATCH ?1 AND e.status = ''
              ORDER BY bm25(entries_fts, 0.0, 2.0, 1.0, 1.5), e.created_utc DESC
              LIMIT ?2",
         )?;
@@ -242,8 +272,8 @@ impl Index {
     /// Entries whose local date shares month/day with `date` but a different year.
     pub fn on_this_day(&self, date: NaiveDate) -> Result<Vec<EntrySummary>> {
         let mut stmt = self.conn.prepare(
-            "SELECT uuid, path, created, date, journal, starred, tags, title FROM entries
-             WHERE month = ?1 AND day = ?2 AND year != ?3 ORDER BY created_utc DESC",
+            "SELECT uuid, path, created, date, journal, starred, tags, title, status FROM entries
+             WHERE month = ?1 AND day = ?2 AND year != ?3 AND status = '' ORDER BY created_utc DESC",
         )?;
         let rows = stmt.query_map(params![date.month(), date.day(), date.year()], row_to_summary)?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
@@ -252,7 +282,7 @@ impl Index {
     pub fn tags(&self) -> Result<Vec<(String, usize)>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT tag, COUNT(*) FROM entry_tags GROUP BY tag ORDER BY COUNT(*) DESC, tag")?;
+            .prepare("SELECT tag, COUNT(*) FROM entry_tags t JOIN entries e ON e.uuid = t.uuid WHERE e.status = '' GROUP BY tag ORDER BY COUNT(*) DESC, tag")?;
         let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as usize)))?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
@@ -260,14 +290,14 @@ impl Index {
     pub fn journals(&self) -> Result<Vec<(String, usize)>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT journal, COUNT(*) FROM entries GROUP BY journal ORDER BY journal")?;
+            .prepare("SELECT journal, COUNT(*) FROM entries WHERE status = '' GROUP BY journal ORDER BY journal")?;
         let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as usize)))?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 
     /// Distinct local dates (newest first), total words, total entries.
     pub fn dates_and_words(&self) -> Result<(Vec<NaiveDate>, usize, usize)> {
-        let mut stmt = self.conn.prepare("SELECT DISTINCT date FROM entries ORDER BY date DESC")?;
+        let mut stmt = self.conn.prepare("SELECT DISTINCT date FROM entries WHERE status = '' ORDER BY date DESC")?;
         let dates: Vec<NaiveDate> = stmt
             .query_map([], |r| r.get::<_, String>(0))?
             .filter_map(|r| r.ok())
@@ -275,18 +305,30 @@ impl Index {
             .collect();
         let (words, total): (i64, i64) = self
             .conn
-            .query_row("SELECT COALESCE(SUM(words), 0), COUNT(*) FROM entries", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            .query_row("SELECT COALESCE(SUM(words), 0), COUNT(*) FROM entries WHERE status = ''", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
         Ok((dates, words as usize, total as usize))
     }
 
     /// Entries whose local date starts with `prefix` (YYYY or YYYY-MM).
     pub fn count_prefix(&self, prefix: &str) -> Result<usize> {
         let n: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM entries WHERE date LIKE ?1 || '%'",
+            "SELECT COUNT(*) FROM entries WHERE date LIKE ?1 || '%' AND status = ''",
             params![prefix],
             |r| r.get(0),
         )?;
         Ok(n as usize)
+    }
+
+    /// Which of `keys` some entry already holds.
+    pub fn known_traces(&self, keys: &[String]) -> Result<std::collections::HashSet<String>> {
+        let mut stmt = self.conn.prepare("SELECT 1 FROM entry_traces WHERE key = ?1 LIMIT 1")?;
+        let mut out = std::collections::HashSet::new();
+        for k in keys {
+            if stmt.exists(params![k])? {
+                out.insert(k.clone());
+            }
+        }
+        Ok(out)
     }
 
     /// path -> (uuid, mtime) for every indexed entry.
@@ -319,6 +361,7 @@ fn row_to_summary(r: &Row<'_>) -> rusqlite::Result<EntrySummary> {
         starred: r.get::<_, i64>(5)? != 0,
         tags,
         title: r.get(7)?,
+        draft: r.get::<_, String>(8)? == crate::entry::DRAFT,
     })
 }
 

@@ -215,7 +215,7 @@ impl JournalServer {
         let p = p.0;
         let from = p.from.map(|s| NaiveDate::parse_from_str(&s, "%Y-%m-%d")).transpose().map_err(bad)?;
         let to = p.to.map(|s| NaiveDate::parse_from_str(&s, "%Y-%m-%d")).transpose().map_err(bad)?;
-        let f = ListFilter { journal: p.journal, tag: p.tag, from, to, starred: p.starred, limit: Some(clamp(p.limit)), offset: p.offset.unwrap_or(0), ascending: false };
+        let f = ListFilter { journal: p.journal, tag: p.tag, from, to, starred: p.starred, limit: Some(clamp(p.limit)), offset: p.offset.unwrap_or(0), ascending: false, ..Default::default() };
         let rows = self.lock().list(&f).map_err(internal)?;
         Ok(Json(rows.into_iter().map(Into::into).collect()))
     }

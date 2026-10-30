@@ -42,6 +42,21 @@ pub struct Frontmatter {
     /// Anything an importer wants to preserve verbatim (e.g. Day One fields).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extra: Option<serde_json::Value>,
+    /// `draft` for a captured day the user has not reviewed yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    /// Keys of the captured traces this entry holds (`git:<repo>:<sha>`, …),
+    /// so capturing the same day again adds nothing twice.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub traces: Vec<String>,
+}
+
+pub const DRAFT: &str = "draft";
+
+impl Frontmatter {
+    pub fn is_draft(&self) -> bool {
+        self.status.as_deref() == Some(DRAFT)
+    }
 }
 
 fn default_journal() -> String {
@@ -86,6 +101,7 @@ impl Entry {
             starred: self.meta.starred,
             title: self.title(),
             path: self.path.clone(),
+            draft: self.meta.is_draft(),
         }
     }
 }
@@ -101,6 +117,9 @@ pub struct EntrySummary {
     pub starred: bool,
     pub title: String,
     pub path: PathBuf,
+    /// Captured and not yet reviewed.
+    #[serde(default)]
+    pub draft: bool,
 }
 
 /// Input for creating an entry. Everything optional has a sensible default.
@@ -121,6 +140,10 @@ pub struct NewEntry {
     pub extra: Option<serde_json::Value>,
     /// Importers may supply a stable uuid so re-imports are idempotent.
     pub uuid: Option<String>,
+    #[serde(default)]
+    pub draft: bool,
+    #[serde(default)]
+    pub traces: Vec<String>,
 }
 
 /// First line that reads as a title: Markdown markers stripped, image-only
