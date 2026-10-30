@@ -322,13 +322,26 @@ fn calendar_events(cfg: &CaptureConfig, date: NaiveDate, tz: Tz, errors: &mut Ve
         };
         for o in crate::ics::occurrences_on(&text, date, tz) {
             let when = o.start.map(|s| s.to_rfc3339()).unwrap_or_else(|| date.to_string());
-            // Invites are written by other people: keep the words, drop Markdown that could link, embed or format.
-            let plain: String = o.summary.chars().filter(|c| !matches!(c, '[' | ']' | '(' | ')' | '<' | '>' | '`' | '*' | '_' | '#' | '!' | '|')).collect();
-            let summary = if plain.trim().is_empty() { "(untitled event)".into() } else { clip(plain.trim(), 80) };
+            let plain = plain_words(&o.summary);
+            let summary = if plain.is_empty() { "(untitled event)".into() } else { clip(&plain, 80) };
             out.push(Event { key: format!("cal:{}:{when}", o.uid), start: o.start, end: o.end, summary });
         }
     }
     out
+}
+
+/// Invites are written by other people: keep their words, drop anything that
+/// could become a link, an embed or formatting once it is Markdown.
+fn plain_words(s: &str) -> String {
+    let spaced: String = s.chars().map(|c| if matches!(c, '[' | ']' | '(' | ')' | '<' | '>' | '`' | '*' | '_' | '#' | '!' | '|' | '~' | '\\') { ' ' } else { c }).collect();
+    spaced
+        .split_whitespace()
+        .filter(|w| {
+            let l = w.to_ascii_lowercase();
+            !(l.contains("://") || l.starts_with("www.") || l.starts_with("mailto:"))
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn read_calendar(src: &str) -> std::result::Result<String, String> {

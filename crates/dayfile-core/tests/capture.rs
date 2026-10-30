@@ -73,7 +73,7 @@ fn capture_drafts_the_day_once_and_accept_keeps_it() {
     commit_as(&repo, "notme@example.com.evil", "Their change", "2026-10-28T12:00:00+09:00");
 
     let ics = dir.path().join("cal.ics");
-    std::fs::write(&ics, "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:s1\nSUMMARY:Standup\nDTSTART;TZID=Asia/Seoul:20261028T093000\nDTEND;TZID=Asia/Seoul:20261028T094500\nEND:VEVENT\nBEGIN:VEVENT\nUID:s2\nSUMMARY:![x](https://evil.example/p.png) [Call](https://evil.example)\nDTSTART;TZID=Asia/Seoul:20261028T200000\nEND:VEVENT\nEND:VCALENDAR\n").unwrap();
+    std::fs::write(&ics, "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:s1\nSUMMARY:Standup\nDTSTART;TZID=Asia/Seoul:20261028T093000\nDTEND;TZID=Asia/Seoul:20261028T094500\nEND:VEVENT\nBEGIN:VEVENT\nUID:s2\nSUMMARY:![x](https://evil.example/p.png) [Call](https://evil.example) www.evil.example\nDTSTART;TZID=Asia/Seoul:20261028T200000\nEND:VEVENT\nEND:VCALENDAR\n").unwrap();
 
     let photos = dir.path().join("photos");
     std::fs::create_dir_all(&photos).unwrap();
@@ -97,7 +97,8 @@ fn capture_drafts_the_day_once_and_accept_keeps_it() {
     assert!(e.body.contains("- 09:30–09:45 · Standup"), "{}", e.body);
     assert!(e.body.contains("- 10:12–16:40 · shop-api · 2 commits (Add order endpoint; Fix refund rounding)"), "{}", e.body);
     assert!(e.body.contains("- 18:20 · 1 photo"), "{}", e.body);
-    assert!(e.body.contains("- 20:00 · xhttps://evil.example/p.png Callhttps://evil.example"), "markdown stripped: {}", e.body);
+    assert!(e.body.contains("- 20:00 · x Call\n"), "markdown and links stripped: {}", e.body);
+    assert!(!e.body.contains("evil") && !e.body.contains("http"), "{}", e.body);
     assert!(!e.body.contains("Their change"), "{}", e.body);
     assert!(e.body.contains("](../../attachments/"), "{}", e.body);
     assert_eq!(e.meta.traces.len(), 5);
