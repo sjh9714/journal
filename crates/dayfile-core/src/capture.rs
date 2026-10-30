@@ -193,7 +193,7 @@ fn render_lines(commits: &[Commit], events: &[Event], photos: &[Photo]) -> Vec<S
         cs.sort_by_key(|c| c.at);
         let (first, last) = (cs[0].at, cs[cs.len() - 1].at);
         let when = if first == last { hm(first) } else { format!("{}–{}", hm(first), hm(last)) };
-        let shown: Vec<String> = cs.iter().take(3).map(|c| clip(&c.subject, 60)).collect();
+        let shown: Vec<String> = cs.iter().take(3).map(|c| clip(&commit_words(&c.subject), 60)).collect();
         let more = if cs.len() > 3 { format!("; +{} more", cs.len() - 3) } else { String::new() };
         let n = if cs.len() == 1 { "1 commit".to_string() } else { format!("{} commits", cs.len()) };
         lines.push((first.timestamp(), format!("- {when} · {repo} · {n} ({}{more})", shown.join("; "))));
@@ -280,7 +280,7 @@ fn git_commits(cfg: &CaptureConfig, date: NaiveDate, tz: Tz, errors: &mut Vec<St
     for repo in repos {
         let name = repo.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let mut cmd = Command::new("git");
-        cmd.arg("-C").arg(&repo).args(["log", "--all", "--no-merges", "--format=%H%x1f%aI%x1f%ae%x1f%s"]).arg(format!("--since={since}")).arg(format!("--until={until}"));
+        cmd.arg("-C").arg(&repo).args(["log", "--branches", "--no-merges", "--format=%H%x1f%aI%x1f%ae%x1f%s"]).arg(format!("--since={since}")).arg(format!("--until={until}"));
         // --author is a regex substring match; it only narrows, the exact check is below.
         cmd.arg(format!("--author={author}"));
         let output = match cmd.output() {
@@ -335,6 +335,14 @@ fn calendar_events(cfg: &CaptureConfig, date: NaiveDate, tz: Tz, errors: &mut Ve
 fn plain_words(s: &str) -> String {
     let spaced: String = s.chars().map(|c| if matches!(c, '[' | ']' | '(' | ')' | '<' | '>' | '`' | '*' | '_' | '#' | '!' | '|' | '~' | '\\') { ' ' } else { c }).collect();
     spaced.split_whitespace().filter(|w| !linkish(w)).collect::<Vec<_>>().join(" ")
+}
+
+/// Commit subjects are the user's own (exact author, local branches), so file
+/// names like `capture.rs` stay; Markdown syntax, URLs and emails go.
+fn commit_words(s: &str) -> String {
+    let spaced: String = s.chars().map(|c| if matches!(c, '[' | ']' | '(' | ')' | '<' | '>' | '`' | '*' | '_' | '#' | '!' | '|' | '~' | '\\') { ' ' } else { c }).collect();
+    let words: Vec<&str> = spaced.split_whitespace().filter(|w| !(w.contains("://") || w.contains('@') || w.to_ascii_lowercase().starts_with("www."))).collect();
+    if words.is_empty() { "(no message)".into() } else { words.join(" ") }
 }
 
 /// Anything a linkifier could turn into a link. Deliberately blunt: any `@`,
@@ -416,7 +424,7 @@ fn exif_time(path: &Path, tz: Tz) -> Option<DateTime<Tz>> {
 
 #[cfg(test)]
 mod tests {
-    use super::plain_words;
+    use super::{commit_words, plain_words};
 
     #[test]
     fn event_titles_lose_anything_link_like() {
@@ -424,5 +432,11 @@ mod tests {
         assert_eq!(plain_words("Sync with a@evil.com at evil.com/x or evil.co, EVIL.CO:8080/x localhost:3000 www.x.org 例え.テスト"), "Sync with at or");
         assert_eq!(plain_words("mailto:me javascript:alert(1) www.evil.example"), "1");
         assert_eq!(plain_words("Standup 10:30 v1.2 release 3.5h 회의 준비"), "Standup 10:30 v1.2 release 3.5h 회의 준비");
+    }
+
+    #[test]
+    fn commit_subjects_keep_file_names_but_lose_links() {
+        assert_eq!(commit_words("Fix capture.rs ![x](https://evil.example) for a@b.c see www.x.org"), "Fix capture.rs x for see");
+        assert_eq!(commit_words("[](https://x.y)"), "(no message)");
     }
 }
