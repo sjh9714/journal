@@ -1,13 +1,20 @@
 // In-memory stand-in used when the UI runs in a plain browser (vite dev)
 // instead of inside Tauri. Lets the interface be developed and screenshotted
 // without the native shell. Never used in the packaged app.
-import type { Entry, EntryPatch, EntrySummary, Filter, NewEntry, Status, Template, TrashedEntry } from "./types";
+import type { CaptureConfig, Entry, EntryPatch, EntrySummary, Fact, Filter, NewEntry, Status, Template, TrashedEntry } from "./types";
 
 const entries = new Map<string, Entry>();
 const trash = new Map<string, { e: Entry; at: string }>();
 let lock: { pass: string; idle: number } | null = null;
 let reminder = { enabled: false, time: "21:00" };
 let fails = 0;
+let capture: CaptureConfig = { git: ["~/code"], git_author: null, calendars: ["https://calendar.example.com/private/basic.ics"], photos: [] };
+const facts: Fact[] = [
+  { topic: "Home", id: "f1", text: "Lives in Busan", valid_from: "2019-01-01", valid_to: "2024-03-01", recorded_at: "2026-01-10T09:00:00+09:00", closed_at: "2026-05-02T09:00:00+09:00" },
+  { topic: "Home", id: "f2", text: "Lives in Seoul", valid_from: "2024-03-01", recorded_at: "2026-05-02T09:00:00+09:00", replaces: ["f1"] },
+  { topic: "Work", id: "f3", text: "Backend intern at a commerce startup", valid_from: "2026-07-01", recorded_at: "2026-07-02T21:00:00+09:00" },
+  { topic: "People", id: "f4", text: "Minji is my study partner for the algorithms course", recorded_at: "2026-09-12T22:00:00+09:00" },
+];
 const templates: Template[] = [
   { slug: "daily", name: "Daily", tags: [], journal: null, body: "# {{weekday}}\n\n**Morning**\n\n\n**Afternoon**\n\n\n**Evening**\n\n" },
   { slug: "gratitude", name: "Gratitude", tags: ["gratitude"], journal: null, body: "# {{weekday}}, {{date}}\n\nThree things I am grateful for today:\n\n1. \n2. \n3. \n" },
@@ -34,7 +41,7 @@ function titleOf(body: string) {
   return "";
 }
 function summary(e: Entry): EntrySummary {
-  return { uuid: e.uuid, created: e.created, date: e.created.slice(0, 10), journal: e.journal, tags: e.tags, starred: e.starred, title: titleOf(e.body), path: e.path };
+  return { uuid: e.uuid, created: e.created, date: e.created.slice(0, 10), journal: e.journal, tags: e.tags, starred: e.starred, title: titleOf(e.body), path: e.path, draft: e.status === "draft" };
 }
 function normalize(b: string) {
   const t = b.replace(/[\n\r]+$/, "");
@@ -43,7 +50,7 @@ function normalize(b: string) {
 function seed() {
   const mk = (created: string, body: string, tags: string[], starred = false, journal = "default") => {
     const id = uuid();
-    entries.set(id, { uuid: id, created, timezone: "Asia/Seoul", journal, tags, starred, body: normalize(body), path: `entries/${created.slice(0, 4)}/${created.slice(0, 10)}-${id.slice(0, 8)}.md`, location: null, weather: null });
+    entries.set(id, { uuid: id, created, timezone: "Asia/Seoul", journal, tags, starred, body: normalize(body), path: `entries/${created.slice(0, 4)}/${created.slice(0, 10)}-${id.slice(0, 8)}.md`, location: null, weather: null, status: null, traces: [] });
   };
   const y = new Date().getFullYear();
   const today = new Date().toISOString().slice(0, 10);
@@ -58,6 +65,7 @@ seed();
 
 function filterList(f: Filter): EntrySummary[] {
   let rows = [...entries.values()].map(summary);
+  if (!f.includeDrafts) rows = rows.filter((r) => !r.draft);
   if (f.journal) rows = rows.filter((r) => r.journal === f.journal);
   if (f.tag) rows = rows.filter((r) => r.tags.includes(f.tag!));
   if (f.from) rows = rows.filter((r) => r.date >= f.from!);
@@ -90,7 +98,7 @@ export const mockInvoke = async (cmd: string, args: Record<string, unknown> = {}
       const n = args.entry as NewEntry;
       const id = uuid();
       const created = n.created ?? new Date().toISOString();
-      const e: Entry = { uuid: id, created, timezone: "Asia/Seoul", journal: n.journal ?? "default", tags: n.tags ?? [], starred: !!n.starred, body: normalize(n.body), path: `entries/${created.slice(0, 4)}/${created.slice(0, 10)}-${id.slice(0, 8)}.md`, location: n.location ?? null, weather: n.weather ?? null };
+      const e: Entry = { uuid: id, created, timezone: "Asia/Seoul", journal: n.journal ?? "default", tags: n.tags ?? [], starred: !!n.starred, body: normalize(n.body), path: `entries/${created.slice(0, 4)}/${created.slice(0, 10)}-${id.slice(0, 8)}.md`, location: n.location ?? null, weather: n.weather ?? null, status: null, traces: [] };
       entries.set(id, e);
       return e;
     }
@@ -205,6 +213,45 @@ export const mockInvoke = async (cmd: string, args: Record<string, unknown> = {}
       return { files: ["Journal.json"], entries: 3, created: 3, already_present: 0, attachments: 1, missing_media: 0, journals: ["Journal"] };
     case "entry_abs_path":
       return `${root}/${((await mockInvoke("get_entry", { id: args.id })) as Entry).path}`;
+    case "get_capture":
+      return capture;
+    case "set_capture":
+      capture = args.capture as CaptureConfig;
+      return capture;
+    case "capture_day": {
+      const date = (args.date as string | null) ?? new Date().toISOString().slice(0, 10);
+      const existing = [...entries.values()].find((e) => e.status === "draft" && e.created.startsWith(date));
+      if (existing) return { date, added: 0, commits: 0, events: 0, photos: 0, draft: summary(existing), created: false, errors: [] };
+      const id = uuid();
+      const body = "Standup and 1 more, 4 commits to shop-api\n\n- 09:30–09:45 · Standup\n- 10:12–16:40 · shop-api · 4 commits (Add order endpoint; Fix refund rounding; Tests for refunds; +1 more)\n- 19:00–21:00 · Algorithms study with Minji\n";
+      const e: Entry = { uuid: id, created: `${date}T21:00:00+09:00`, timezone: "Asia/Seoul", journal: "default", tags: [], starred: false, body, path: `entries/${date.slice(0, 4)}/${date}-${id.slice(0, 8)}.md`, location: null, weather: null, status: "draft", traces: ["git:a", "cal:b"] };
+      entries.set(id, e);
+      return { date, added: 6, commits: 4, events: 2, photos: 0, draft: summary(e), created: true, errors: [] };
+    }
+    case "accept_draft": {
+      const e = (await mockInvoke("get_entry", { id: args.id })) as Entry;
+      e.status = null;
+      return e;
+    }
+    case "recall": {
+      const asOf = (args.asOf as string | null) ?? new Date().toISOString().slice(0, 10);
+      const q = ((args.query as string | null) ?? "").toLowerCase();
+      return facts.filter((f) => !f.retracted_at && (!f.valid_from || f.valid_from <= asOf) && (!f.valid_to || f.valid_to > asOf) && (!args.topic || f.topic.toLowerCase() === String(args.topic).toLowerCase()) && f.text.toLowerCase().includes(q));
+    }
+    case "fact_history":
+      return facts.filter((f) => f.topic === args.topic);
+    case "list_topics": {
+      const m = new Map<string, number>();
+      const today = new Date().toISOString().slice(0, 10);
+      for (const f of facts) m.set(f.topic, (m.get(f.topic) ?? 0) + (!f.retracted_at && (!f.valid_to || f.valid_to > today) ? 1 : 0));
+      return [...m.entries()].sort();
+    }
+    case "retract_fact": {
+      const f = facts.find((x) => x.id === args.id);
+      if (!f) throw new Error("fact not found");
+      f.retracted_at = new Date().toISOString();
+      return f;
+    }
     default:
       throw new Error(`mock: unknown command ${cmd}`);
   }

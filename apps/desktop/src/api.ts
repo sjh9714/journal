@@ -1,5 +1,5 @@
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
-import type { Entry, EntryPatch, EntrySummary, Filter, ImportReport, LockInfo, NewEntry, Problem, ReindexStats, ReminderConfig, Stats, Status, Template, TrashedEntry, VerifyResult } from "./types";
+import type { CaptureConfig, CaptureReport, Entry, EntryPatch, EntrySummary, Fact, Filter, ImportReport, LockInfo, NewEntry, Problem, ReindexStats, ReminderConfig, Stats, Status, Template, TrashedEntry, VerifyResult } from "./types";
 
 export const IN_TAURI = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -11,10 +11,13 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 
 /** Rust omits empty/false/null fields when serializing; give the UI stable shapes. */
 function normEntry(e: Entry): Entry {
-  return { ...e, tags: e.tags ?? [], starred: e.starred ?? false, location: e.location ?? null, weather: e.weather ?? null };
+  return { ...e, tags: e.tags ?? [], starred: e.starred ?? false, location: e.location ?? null, weather: e.weather ?? null, status: e.status ?? null, traces: e.traces ?? [] };
 }
 function normSummary(s: EntrySummary): EntrySummary {
-  return { ...s, tags: s.tags ?? [], starred: s.starred ?? false };
+  return { ...s, tags: s.tags ?? [], starred: s.starred ?? false, draft: s.draft ?? false };
+}
+function normCapture(c: CaptureConfig): CaptureConfig {
+  return { git: c.git ?? [], git_author: c.git_author ?? null, calendars: c.calendars ?? [], photos: c.photos ?? [] };
 }
 const entry = (p: Promise<Entry>) => p.then(normEntry);
 const list = (p: Promise<EntrySummary[]>) => p.then((rows) => rows.map(normSummary));
@@ -50,4 +53,12 @@ export const api = {
   verifyPasscode: (pass: string) => invoke<VerifyResult>("verify_passcode", { pass }),
   getReminder: () => invoke<ReminderConfig>("get_reminder"),
   setReminder: (enabled: boolean, time: string) => invoke<ReminderConfig>("set_reminder", { enabled, time }),
+  getCapture: () => invoke<CaptureConfig>("get_capture").then(normCapture),
+  setCapture: (capture: CaptureConfig) => invoke<CaptureConfig>("set_capture", { capture }).then(normCapture),
+  captureDay: (date?: string) => invoke<CaptureReport>("capture_day", { date: date ?? null }).then((r) => ({ ...r, draft: r.draft ? normSummary(r.draft) : null })),
+  acceptDraft: (id: string) => entry(invoke<Entry>("accept_draft", { id })),
+  recall: (q: { topic?: string; query?: string; asOf?: string } = {}) => invoke<Fact[]>("recall", { topic: q.topic ?? null, query: q.query ?? null, asOf: q.asOf ?? null }),
+  factHistory: (topic: string) => invoke<Fact[]>("fact_history", { topic }),
+  topics: () => invoke<[string, number][]>("list_topics"),
+  retractFact: (id: string) => invoke<Fact>("retract_fact", { id }),
 };

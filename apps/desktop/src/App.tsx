@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { Entry, EntrySummary, Problem, Stats, Status, Template } from "./types";
+import type { CaptureReport, Entry, EntrySummary, Problem, Stats, Status, Template } from "./types";
 import { LockScreen } from "./components/LockScreen";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { IN_TAURI } from "./api";
@@ -9,6 +9,7 @@ import { Sidebar, type View } from "./components/Sidebar";
 import { EntryEditor } from "./components/EntryEditor";
 import { OnThisDay } from "./components/OnThisDay";
 import { CalendarView } from "./components/CalendarView";
+import { MemoryView } from "./components/MemoryView";
 import { Settings, type Theme } from "./components/Settings";
 import { Onboarding } from "./components/Onboarding";
 import { localRfc3339, todayISO } from "./lib/dates";
@@ -35,7 +36,7 @@ export default function App() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [locked, setLocked] = useState<boolean | null>(null); // null = not yet known
   const [idleMinutes, setIdleMinutes] = useState(5);
-  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
+  const [toast, setToast] = useState<{ text: string; action?: { label: string; run: () => void } } | null>(null);
   const [query, setQuery] = useState("");
   const [journal, setJournal] = useState<string | null>(null);
   const [tag, setTag] = useState<string | null>(null);
@@ -53,7 +54,7 @@ export default function App() {
     if (query.trim()) {
       setEntries(await api.search(query.trim(), 200));
     } else {
-      setEntries(await api.list({ journal: journal ?? undefined, tag: tag ?? undefined, starred: starredOnly || undefined, limit: 500 }));
+      setEntries(await api.list({ journal: journal ?? undefined, tag: tag ?? undefined, starred: starredOnly || undefined, limit: 500, includeDrafts: true }));
     }
   }, [query, journal, tag, starredOnly]);
 
@@ -106,11 +107,13 @@ export default function App() {
       firedFor = key;
       const rows = await api.onDate(todayISO());
       if (rows.length > 0) return;
+      // Draft the day first so the reminder can point at something to review.
+      const cap = await captureIfConfigured();
       if (!IN_TAURI) { console.info("reminder would fire"); return; }
       let ok = await isPermissionGranted();
       if (!ok) ok = (await requestPermission()) === "granted";
-      report("warn", `reminder ${r.time}: permission=${ok}`);
-      if (ok) sendNotification({ title: "Dayfile", body: "No entry yet today. A line is enough." });
+      report("warn", `reminder ${r.time}: permission=${ok} draft=${!!cap?.draft}`);
+      if (ok) sendNotification({ title: "Dayfile", body: cap?.draft ? "Your day is drafted. Open Dayfile to add a line and keep it." : "No entry yet today. A line is enough." });
     };
     const t = window.setInterval(tick, 60_000);
     return () => window.clearInterval(t);
@@ -154,6 +157,20 @@ export default function App() {
     setView("timeline");
   }, []);
 
+  // Capture once per launch, after unlock, when sources are set up.
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || !status?.root || locked !== false) return;
+    captured.current = true;
+    captureIfConfigured().then((r) => {
+      if (!r || r.added === 0 || !r.draft) return;
+      const id = r.draft.uuid;
+      refreshList();
+      setToast({ text: `Today's draft: ${describe(r)}.`, action: { label: "Review", run: () => { setToast(null); openEntry(id); } } });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.root, locked]);
+
   // Dev hooks: VITE_OPEN_FIRST=1 opens the newest entry on launch; VITE_SELFTEST=1 runs src/selftest.ts.
   const devHooked = useRef(false);
   useEffect(() => {
@@ -181,7 +198,7 @@ export default function App() {
 
   const onChanged = useCallback((e: Entry) => {
     setSelected((cur) => (cur?.uuid === e.uuid ? e : cur));
-    setEntries((rows) => rows.map((r) => (r.uuid === e.uuid ? { ...r, title: titleOf(e.body), tags: e.tags, starred: e.starred, journal: e.journal } : r)));
+    setEntries((rows) => rows.map((r) => (r.uuid === e.uuid ? { ...r, title: titleOf(e.body), tags: e.tags, starred: e.starred, journal: e.journal, draft: e.status === "draft" } : r)));
     refreshMeta();
   }, [refreshMeta]);
 
@@ -191,12 +208,15 @@ export default function App() {
     refreshMeta();
     setToast({
       text: "Moved to Trash. Restorable for 30 days in Settings.",
-      undo: async () => {
-        const e = await api.restore(id);
-        setToast(null);
-        setSelected(e);
-        await refreshList();
-        refreshMeta();
+      action: {
+        label: "Undo",
+        run: async () => {
+          const e = await api.restore(id);
+          setToast(null);
+          setSelected(e);
+          await refreshList();
+          refreshMeta();
+        },
       },
     });
   }, [refreshList, refreshMeta]);
@@ -219,6 +239,19 @@ export default function App() {
   if (!status.root) return <Onboarding status={status} onReady={setStatus} />;
 
   const showOtd = selected && selected.created.slice(0, 10) === todayISO();
+  const drafts = entries.filter((e) => e.draft);
+  const captureNow = async () => {
+    const cfg = await api.getCapture();
+    if (!cfg.git.length && !cfg.calendars.length && !cfg.photos.length) {
+      setView("settings");
+      setToast({ text: "Add a git folder, calendar or photo folder under Capture first." });
+      return;
+    }
+    const r = await api.captureDay();
+    await refreshList();
+    if (r.draft) openEntry(r.draft.uuid);
+    setToast({ text: r.added ? `Captured ${describe(r)}.` : "Nothing new since the last capture." + (r.errors.length ? ` ${r.errors.join(" · ")}` : "") });
+  };
 
   return (
     <div className="app">
@@ -256,8 +289,10 @@ export default function App() {
             onRestored={async (e) => { setSelected(e); setView("timeline"); await refreshList(); refreshMeta(); }}
             onLockChanged={refreshLock}
             onLockNow={() => setLocked(true)}
+            onCaptured={() => refreshList()}
           />
         )}
+        {view === "memory" && <MemoryView onOpen={openEntry} />}
         {view === "calendar" && <CalendarView onOpen={openEntry} onNewOn={(d) => newEntry(d)} />}
         {view === "timeline" && selected && (
           <>
@@ -271,7 +306,13 @@ export default function App() {
             <div className="home-empty">
               <h2>{greeting()}</h2>
               <p>Pick an entry on the left, or press <kbd>⌘N</kbd> to start today's.</p>
-              <button className="primary" onClick={() => newEntry()}>New entry</button>
+              <div className="btn-row center">
+                <button className="primary" onClick={() => newEntry()}>New entry</button>
+                <button onClick={captureNow}>Capture today</button>
+              </div>
+              {drafts.length > 0 && (
+                <p><button className="link" onClick={() => openEntry(drafts[0].uuid)}>{drafts.length === 1 ? "1 drafted day to review" : `${drafts.length} drafted days to review`}</button></p>
+              )}
               {stats && stats.total > 0 && (
                 <p className="stats-line">
                   {stats.streak_days > 0 ? `${stats.streak_days}-day streak` : "No entry yet today"}
@@ -285,7 +326,7 @@ export default function App() {
       {toast && (
         <div className="toast">
           <span>{toast.text}</span>
-          {toast.undo && <button className="link" onClick={toast.undo}>Undo</button>}
+          {toast.action && <button className="link" onClick={toast.action.run}>{toast.action.label}</button>}
         </div>
       )}
     </div>
@@ -306,6 +347,22 @@ function titleOf(body: string) {
     if (l) return l;
   }
   return "";
+}
+
+async function captureIfConfigured(): Promise<CaptureReport | null> {
+  try {
+    const cfg = await api.getCapture();
+    if (!cfg.git.length && !cfg.calendars.length && !cfg.photos.length) return null;
+    return await api.captureDay();
+  } catch (e) {
+    report("warn", `capture failed: ${e}`);
+    return null;
+  }
+}
+
+function describe(r: CaptureReport) {
+  const n = (k: number, one: string, many: string) => (k === 1 ? `1 ${one}` : `${k} ${many}`);
+  return [r.commits && n(r.commits, "commit", "commits"), r.events && n(r.events, "event", "events"), r.photos && n(r.photos, "photo", "photos")].filter(Boolean).join(", ");
 }
 
 function greeting() {

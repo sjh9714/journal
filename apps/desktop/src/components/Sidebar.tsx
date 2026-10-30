@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CalendarDays, ChevronDown, List, Plus, Search, Settings, Star } from "lucide-react";
+import { AlertTriangle, Brain, CalendarDays, ChevronDown, List, Plus, Search, Settings, Star } from "lucide-react";
 import type { EntrySummary, Template } from "../types";
 import { monthKey, monthLabel, timeLabel } from "../lib/dates";
 
-export type View = "timeline" | "calendar" | "settings";
+export type View = "timeline" | "calendar" | "memory" | "settings";
 
 interface Props {
   entries: EntrySummary[];
@@ -85,6 +85,9 @@ export function Sidebar(p: Props) {
         <button className={p.starredOnly ? "on" : ""} onClick={() => p.onStarred(!p.starredOnly)} title="Starred only">
           <Star size={15} />
         </button>
+        <button className={p.view === "memory" ? "on" : ""} onClick={() => p.onView("memory")} title="Memory">
+          <Brain size={15} />
+        </button>
         <span className="grow" />
         <button className={p.view === "settings" ? "on" : ""} onClick={() => p.onView("settings")} title="Settings">
           <Settings size={15} />
@@ -125,6 +128,7 @@ export function Sidebar(p: Props) {
                 </div>
                 <div className="row-main">
                   <div className="row-title">
+                    {e.draft && <span className="badge">Draft</span>}
                     {e.starred && <Star size={11} className="star" />}
                     {e.title || <em className="dim">Untitled</em>}
                   </div>

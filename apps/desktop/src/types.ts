@@ -16,6 +16,8 @@ export interface EntrySummary {
   starred: boolean;
   title: string;
   path: string;
+  /** Captured and not yet reviewed. */
+  draft: boolean;
 }
 export interface Entry {
   uuid: string;
@@ -27,6 +29,9 @@ export interface Entry {
   location?: Location | null;
   weather?: Weather | null;
   extra?: unknown;
+  /** "draft" until the user keeps a captured day. */
+  status: string | null;
+  traces: string[];
   body: string;
   path: string;
 }
@@ -45,6 +50,7 @@ export interface Filter {
   limit?: number;
   offset?: number;
   ascending?: boolean;
+  includeDrafts?: boolean;
 }
 export interface NewEntry {
   body: string;
@@ -120,4 +126,33 @@ export interface VerifyResult {
 export interface ReminderConfig {
   enabled: boolean;
   time: string;
+}
+export interface CaptureConfig {
+  git: string[];
+  git_author?: string | null;
+  calendars: string[];
+  photos: string[];
+}
+export interface CaptureReport {
+  date: string;
+  added: number;
+  commits: number;
+  events: number;
+  photos: number;
+  draft: EntrySummary | null;
+  created: boolean;
+  errors: string[];
+}
+/** A memory fact with its topic. Dates are YYYY-MM-DD; valid_to is exclusive. */
+export interface Fact {
+  topic: string;
+  id: string;
+  text: string;
+  valid_from?: string | null;
+  valid_to?: string | null;
+  recorded_at: string;
+  closed_at?: string | null;
+  retracted_at?: string | null;
+  source?: string | null;
+  replaces?: string[];
 }

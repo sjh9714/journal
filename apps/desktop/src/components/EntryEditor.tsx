@@ -7,7 +7,7 @@ import { Markdown } from "@tiptap/markdown";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { Cloud, FolderOpen, ImagePlus, MapPin, Star, Trash2 } from "lucide-react";
+import { Check, Cloud, FolderOpen, ImagePlus, MapPin, Sparkles, Star, Trash2 } from "lucide-react";
 import { api, IN_TAURI } from "../api";
 import type { Entry } from "../types";
 import { dayLabel, timeLabel } from "../lib/dates";
@@ -108,6 +108,7 @@ export function EntryEditor({ entry, reloadKey, journals, onChanged, onDeleted }
     await api.remove(entry.uuid);
     onDeleted(entry.uuid);
   };
+  const keep = async () => onChanged(await api.acceptDraft(entry.uuid));
   const reveal = async () => {
     if (!IN_TAURI) return;
     revealItemInDir(await api.entryAbsPath(entry.uuid));
@@ -149,6 +150,15 @@ export function EntryEditor({ entry, reloadKey, journals, onChanged, onDeleted }
           <button className="icon-btn danger" title="Move to Trash" onClick={remove}><Trash2 size={16} /></button>
         </div>
       </header>
+      {entry.status === "draft" && (
+        <div className="draft-banner">
+          <Sparkles size={15} />
+          <span>Drafted from your commits, calendar and photos. Add how the day felt, then keep it.</span>
+          <span className="grow" />
+          <button className="primary small" onClick={keep}><Check size={14} /> Keep</button>
+          <button className="small" onClick={remove}>Discard</button>
+        </div>
+      )}
       <div className="entry-body">
         <EditorContent editor={editor} className="prose" />
       </div>

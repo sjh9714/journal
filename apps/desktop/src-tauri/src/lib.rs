@@ -3,7 +3,7 @@
 
 use chrono::NaiveDate;
 use dayfile_core::store::{EntryPatch, ReindexStats};
-use dayfile_core::{import_dayone, CaptureConfig, Drafts, Entry, EntrySummary, ImportOptions, ImportReport, ListFilter, NewEntry, Problem, Stats, Store, Template, TrashedEntry};
+use dayfile_core::{import_dayone, today, CaptureConfig, CaptureReport, Drafts, Entry, EntrySummary, ImportOptions, ImportReport, ListFilter, NewEntry, Problem, Recall, Stats, Store, Template, TopicFact, TrashedEntry};
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use rand_core::OsRng;
 use argon2::Argon2;
@@ -368,6 +368,48 @@ fn set_reminder(state: State<AppState>, enabled: bool, time: String) -> CmdResul
 }
 
 #[tauri::command]
+fn get_capture(state: State<AppState>) -> CaptureConfig {
+    load_config(&state.config_path).capture
+}
+
+#[tauri::command]
+fn set_capture(state: State<AppState>, capture: CaptureConfig) -> CmdResult<CaptureConfig> {
+    Ok(update_config(&state.config_path, |c| c.capture = capture)?.capture)
+}
+
+/// Off the main thread: a calendar feed can take seconds to download.
+#[tauri::command(async)]
+fn capture_day(state: State<AppState>, date: Option<NaiveDate>) -> CmdResult<CaptureReport> {
+    let cfg = load_config(&state.config_path).capture;
+    with_store(&state, |s| s.capture(date.unwrap_or_else(today), &cfg))
+}
+
+#[tauri::command]
+fn accept_draft(state: State<AppState>, id: String) -> CmdResult<Entry> {
+    with_store(&state, |s| s.accept_draft(&id))
+}
+
+#[tauri::command]
+fn recall(state: State<AppState>, topic: Option<String>, query: Option<String>, as_of: Option<NaiveDate>) -> CmdResult<Vec<TopicFact>> {
+    with_store(&state, |s| s.recall(&Recall { topic, query, as_of, known_at: None }))
+}
+
+#[tauri::command]
+fn fact_history(state: State<AppState>, topic: String) -> CmdResult<Vec<TopicFact>> {
+    with_store(&state, |s| s.fact_history(&topic))
+}
+
+#[tauri::command]
+fn list_topics(state: State<AppState>) -> CmdResult<Vec<(String, usize)>> {
+    with_store(&state, |s| s.topics())
+}
+
+#[tauri::command]
+fn retract_fact(state: State<AppState>, id: String) -> CmdResult<TopicFact> {
+    with_store(&state, |s| s.retract(&id))
+}
+
+#[tauri::command]
 fn list_problems(state: State<AppState>) -> CmdResult<Vec<Problem>> {
     with_store(&state, |s| Ok(s.problems().to_vec()))
 }
@@ -514,6 +556,14 @@ pub fn run() {
             attach_file,
             import_dayone_export,
             entry_abs_path,
+            get_capture,
+            set_capture,
+            capture_day,
+            accept_draft,
+            recall,
+            fact_history,
+            list_topics,
+            retract_fact,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

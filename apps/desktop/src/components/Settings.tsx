@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { api, IN_TAURI } from "../api";
-import type { Entry, ImportReport, LockInfo, Problem, ReminderConfig, Status, TrashedEntry } from "../types";
+import type { CaptureReport, Entry, ImportReport, LockInfo, Problem, ReminderConfig, Status, TrashedEntry } from "../types";
+import { CaptureSettings } from "./CaptureSettings";
 import { captureEnabled, setCaptureEnabled } from "../lib/enrich";
 
 export type Theme = "system" | "light" | "dark";
 
-export function Settings({ status, theme, onTheme, onStatus, onImported, problems, onReindexed, onRestored, onLockChanged, onLockNow }: {
+export function Settings({ status, theme, onTheme, onStatus, onImported, problems, onReindexed, onRestored, onLockChanged, onLockNow, onCaptured }: {
   status: Status;
   theme: Theme;
   onTheme: (t: Theme) => void;
@@ -18,6 +19,7 @@ export function Settings({ status, theme, onTheme, onStatus, onImported, problem
   onRestored: (e: Entry) => void;
   onLockChanged: () => Promise<LockInfo>;
   onLockNow: () => void;
+  onCaptured: (r: CaptureReport) => void;
 }) {
   const [trash, setTrash] = useState<TrashedEntry[]>([]);
   const [lock, setLock] = useState<LockInfo>({ enabled: false, idle_minutes: 5 });
@@ -145,6 +147,8 @@ export function Settings({ status, theme, onTheme, onStatus, onImported, problem
         <p className="dim">Uses the system location service when available, otherwise a city-level guess from your network connection (ipapi.co), then Open-Meteo for the weather. No account or key. Nothing else leaves this machine.</p>
       </section>
 
+      <CaptureSettings onCaptured={onCaptured} />
+
       <section>
         <h3>Import from Day One</h3>
         <p className="dim">In Day One choose Export → JSON. Pick the .zip here. Entries, photos, tags, location and weather come across; re-importing never duplicates.</p>
@@ -158,7 +162,7 @@ export function Settings({ status, theme, onTheme, onStatus, onImported, problem
 
       <section>
         <h3>Agents (MCP)</h3>
-        <p className="dim">Install the <span className="mono">journal</span> CLI, then let Claude Code read and write this journal:</p>
+        <p className="dim">Install the <span className="mono">dayfile</span> CLI, then let Claude Code read and write this journal and its memory:</p>
         <pre className="mono">{mcpCmd}</pre>
         <p className="dim">Add <span className="mono">--read-only</span> to allow reading only. Point it at this folder with <span className="mono">--root {status.root}</span> if it is not the default.</p>
       </section>

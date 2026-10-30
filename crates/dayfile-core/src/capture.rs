@@ -249,6 +249,12 @@ fn git_commits(cfg: &CaptureConfig, date: NaiveDate, tz: Tz, errors: &mut Vec<St
         let out = Command::new("git").args(["config", "--global", "user.email"]).output().ok()?;
         Some(String::from_utf8_lossy(&out.stdout).trim().to_string()).filter(|s| !s.is_empty())
     });
+    // Other people's commit messages stay out of the journal (and out of the
+    // agents that read it): no known author, no git capture.
+    let Some(author) = author else {
+        errors.push("git: set an author email (`dayfile sources author <email>` or Settings) to capture commits".into());
+        return Vec::new();
+    };
     let mut repos: Vec<PathBuf> = Vec::new();
     let mut seen = HashSet::new();
     for root in &cfg.git {
@@ -275,9 +281,7 @@ fn git_commits(cfg: &CaptureConfig, date: NaiveDate, tz: Tz, errors: &mut Vec<St
         let name = repo.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let mut cmd = Command::new("git");
         cmd.arg("-C").arg(&repo).args(["log", "--all", "--no-merges", "--format=%H%x1f%aI%x1f%s"]).arg(format!("--since={since}")).arg(format!("--until={until}"));
-        if let Some(a) = &author {
-            cmd.arg(format!("--author={a}"));
-        }
+        cmd.arg(format!("--author={author}"));
         let output = match cmd.output() {
             Ok(o) if o.status.success() => o,
             Ok(o) => {
@@ -314,7 +318,8 @@ fn calendar_events(cfg: &CaptureConfig, date: NaiveDate, tz: Tz, errors: &mut Ve
         };
         for o in crate::ics::occurrences_on(&text, date, tz) {
             let when = o.start.map(|s| s.to_rfc3339()).unwrap_or_else(|| date.to_string());
-            out.push(Event { key: format!("cal:{}:{when}", o.uid), start: o.start, end: o.end, summary: if o.summary.is_empty() { "(untitled event)".into() } else { o.summary } });
+            let summary = if o.summary.trim().is_empty() { "(untitled event)".into() } else { clip(o.summary.trim(), 80) };
+            out.push(Event { key: format!("cal:{}:{when}", o.uid), start: o.start, end: o.end, summary });
         }
     }
     out
