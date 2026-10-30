@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { CaptureReport, Entry, EntrySummary, Problem, Stats, Status, Template } from "./types";
+import type { Entry, EntrySummary, Problem, Stats, Status, Template } from "./types";
 import { LockScreen } from "./components/LockScreen";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { IN_TAURI } from "./api";
@@ -14,6 +14,7 @@ import { Settings, type Theme } from "./components/Settings";
 import { Onboarding } from "./components/Onboarding";
 import { localRfc3339, todayISO } from "./lib/dates";
 import { captureContext } from "./lib/enrich";
+import { captureIfConfigured, describe } from "./lib/capture";
 import "./styles.css";
 
 function loadTheme(): Theme {
@@ -311,7 +312,7 @@ export default function App() {
                 <button onClick={captureNow}>Capture today</button>
               </div>
               {drafts.length > 0 && (
-                <p><button className="link" onClick={() => openEntry(drafts[0].uuid)}>{drafts.length === 1 ? "1 drafted day to review" : `${drafts.length} drafted days to review`}</button></p>
+                <p><button className="link" onClick={() => openEntry(drafts[0].uuid)}>{drafts.length === 1 ? "1 draft to review" : `${drafts.length} drafts to review`}</button></p>
               )}
               {stats && stats.total > 0 && (
                 <p className="stats-line">
@@ -347,22 +348,6 @@ function titleOf(body: string) {
     if (l) return l;
   }
   return "";
-}
-
-async function captureIfConfigured(): Promise<CaptureReport | null> {
-  try {
-    const cfg = await api.getCapture();
-    if (!cfg.git.length && !cfg.calendars.length && !cfg.photos.length) return null;
-    return await api.captureDay();
-  } catch (e) {
-    report("warn", `capture failed: ${e}`);
-    return null;
-  }
-}
-
-function describe(r: CaptureReport) {
-  const n = (k: number, one: string, many: string) => (k === 1 ? `1 ${one}` : `${k} ${many}`);
-  return [r.commits && n(r.commits, "commit", "commits"), r.events && n(r.events, "event", "events"), r.photos && n(r.photos, "photo", "photos")].filter(Boolean).join(", ");
 }
 
 function greeting() {

@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { X } from "lucide-react";
 import { api, IN_TAURI } from "../api";
 import type { CaptureConfig, CaptureReport } from "../types";
+import { describe } from "../lib/capture";
 
 /** Settings → Capture: where a day's draft comes from. */
 export function CaptureSettings({ onCaptured }: { onCaptured: (r: CaptureReport) => void }) {
@@ -32,7 +33,7 @@ export function CaptureSettings({ onCaptured }: { onCaptured: (r: CaptureReport)
     setMsg(null);
     try {
       const r = await api.captureDay();
-      setMsg(r.added === 0 ? "Nothing new today." : `Added ${r.commits} commits, ${r.events} events, ${r.photos} photos to today's draft.`);
+      setMsg(r.added === 0 ? "Nothing new today." : `Added ${describe(r)} to today's draft.`);
       if (r.errors.length) setMsg((m) => `${m ?? ""} ${r.errors.join(" · ")}`);
       onCaptured(r);
     } catch (e) {

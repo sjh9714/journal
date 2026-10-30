@@ -244,3 +244,5 @@ button.small { padding: 5px 10px; font-size: 12.5px; border-radius: 7px; display
 .memory-empty { max-width: 520px; margin: 80px auto; text-align: center; color: var(--ink-2); }
 .memory-empty h2 { color: var(--ink); }
 .btn-row button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.fact { padding-left: 13px; }
+.fact.current { border-left: 3px solid var(--accent); padding-left: 10px; }
