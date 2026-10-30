@@ -10,6 +10,8 @@ pub enum Error {
     Ambiguous(String, usize),
     #[error("invalid frontmatter in {path}: {msg}")]
     Frontmatter { path: PathBuf, msg: String },
+    #[error("{0}")]
+    Invalid(String),
     #[error("invalid timezone: {0}")]
     Timezone(String),
     #[error(transparent)]

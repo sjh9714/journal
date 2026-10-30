@@ -49,6 +49,19 @@ CREATE TABLE IF NOT EXISTS entry_traces (
     PRIMARY KEY (uuid, key)
 );
 CREATE INDEX IF NOT EXISTS idx_entry_traces_key ON entry_traces(key);
+CREATE TABLE IF NOT EXISTS facts (
+    id            TEXT PRIMARY KEY,
+    topic         TEXT NOT NULL,
+    topic_name    TEXT NOT NULL,
+    text          TEXT NOT NULL,
+    valid_from    TEXT,
+    valid_to      TEXT,
+    recorded_utc  INTEGER NOT NULL,
+    closed_utc    INTEGER,
+    retracted_utc INTEGER,
+    json          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_facts_topic ON facts(topic);
 CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
     uuid UNINDEXED, title, body, tags, tokenize = 'unicode61 remove_diacritics 2'
 );
@@ -317,6 +330,68 @@ impl Index {
             |r| r.get(0),
         )?;
         Ok(n as usize)
+    }
+
+    /// Replace every fact with what the memory files say now.
+    pub fn replace_facts(&mut self, facts: &[(String, String, crate::memory::Fact)]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM facts", [])?;
+        for (slug, name, f) in facts {
+            tx.execute(
+                "INSERT OR REPLACE INTO facts (id, topic, topic_name, text, valid_from, valid_to, recorded_utc, closed_utc, retracted_utc, json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    f.id,
+                    slug,
+                    name,
+                    f.text,
+                    f.valid_from.map(|d| d.to_string()),
+                    f.valid_to.map(|d| d.to_string()),
+                    f.recorded_at.timestamp(),
+                    f.closed_at.map(|t| t.timestamp()),
+                    f.retracted_at.map(|t| t.timestamp()),
+                    serde_json::to_string(f)?,
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Bi-temporal lookup: facts true on `as_of` according to what was known
+    /// at `known_at`. A closing (`valid_to`) only counts once it was recorded.
+    pub fn recall(&self, topic: Option<&str>, query: Option<&str>, as_of: NaiveDate, known_at: DateTime<FixedOffset>) -> Result<Vec<crate::memory::TopicFact>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT topic_name, json FROM facts
+             WHERE (?1 IS NULL OR topic = ?1)
+               AND (?2 IS NULL OR instr(lower(text), lower(?2)) > 0)
+               AND recorded_utc <= ?4
+               AND (retracted_utc IS NULL OR retracted_utc > ?4)
+               AND (valid_from IS NULL OR valid_from <= ?3)
+               AND (valid_to IS NULL OR valid_to > ?3 OR (closed_utc IS NOT NULL AND closed_utc > ?4))
+             ORDER BY topic_name, valid_from, recorded_utc",
+        )?;
+        let rows = stmt.query_map(params![topic, query, as_of.to_string(), known_at.timestamp()], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (topic, json) = row?;
+            out.push(crate::memory::TopicFact { topic, fact: serde_json::from_str(&json)? });
+        }
+        Ok(out)
+    }
+
+    /// Topic display names with the number of facts holding on `today`.
+    pub fn topics(&self, today: NaiveDate) -> Result<Vec<(String, usize)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT topic_name, SUM(CASE WHEN retracted_utc IS NULL AND (valid_from IS NULL OR valid_from <= ?1) AND (valid_to IS NULL OR valid_to > ?1) THEN 1 ELSE 0 END)
+             FROM facts GROUP BY topic ORDER BY topic_name",
+        )?;
+        let rows = stmt.query_map(params![today.to_string()], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as usize)))?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
+    }
+
+    pub fn fact_topic(&self, id: &str) -> Result<Option<String>> {
+        Ok(self.conn.query_row("SELECT topic_name FROM facts WHERE id = ?1", params![id], |r| r.get(0)).optional()?)
     }
 
     /// Which of `keys` some entry already holds.

@@ -317,7 +317,7 @@ fn read_calendar(src: &str) -> std::result::Result<String, String> {
     if url.starts_with("http://") || url.starts_with("https://") {
         let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(20))).build().into();
         let mut res = agent.get(&url).call().map_err(|e| e.to_string())?;
-        res.body_mut().with_config().limit(64 * 1024 * 1024).read_to_string().map_err(|e| e.to_string())
+        res.body_mut().with_config().limit(8 * 1024 * 1024).read_to_string().map_err(|e| e.to_string())
     } else {
         std::fs::read_to_string(expand_home(Path::new(src))).map_err(|e| e.to_string())
     }

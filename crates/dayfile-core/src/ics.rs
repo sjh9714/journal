@@ -50,6 +50,9 @@ impl When {
     }
 }
 
+/// A personal calendar has a few thousand events; more is not a calendar.
+const MAX_EVENTS: usize = 50_000;
+
 #[derive(Debug, Default)]
 struct Event {
     uid: String,
@@ -149,6 +152,9 @@ fn parse(ics: &str) -> Vec<Event> {
     let mut events = Vec::new();
     let mut cur: Option<Event> = None;
     for line in &lines {
+        if events.len() >= MAX_EVENTS {
+            break;
+        }
         match line.as_str() {
             "BEGIN:VEVENT" => cur = Some(Event::default()),
             "END:VEVENT" => events.extend(cur.take()),
@@ -210,8 +216,10 @@ fn expand(rule: &str, start: When, until: NaiveDate) -> Vec<NaiveDate> {
     let bymonthday: Vec<i32> = r.get("BYMONTHDAY").map(|v| v.split(',').filter_map(|d| d.parse().ok()).collect()).unwrap_or_default();
 
     let mut out = Vec::new();
-    let mut d = first;
-    // Bounded: a daily rule over decades is still only a few thousand steps.
+    // Only COUNT needs walking from the first occurrence; otherwise every rule
+    // is phase-checked against `first`, so start two days before `until`.
+    let mut d = if count.is_some() { first } else { first.max(until - Duration::days(2)) };
+    // Bounded: a daily COUNT rule over decades is still a few thousand steps.
     for _ in 0..20_000 {
         if d > end || count.is_some_and(|c| out.len() >= c) {
             break;

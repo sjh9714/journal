@@ -16,6 +16,7 @@ pub mod error;
 pub mod frontmatter;
 mod ics;
 pub mod index;
+pub mod memory;
 pub mod stats;
 pub mod store;
 pub mod template;
@@ -23,6 +24,7 @@ pub mod trash;
 
 pub use capture::{CaptureConfig, CaptureReport};
 pub use dayone::{import_dayone, ImportOptions, ImportReport};
+pub use memory::{Fact, NewFact, Recall, TopicFact};
 pub use entry::{today, Entry, EntrySummary, Location, NewEntry, Weather};
 pub use error::{Error, Result};
 pub use stats::Stats;

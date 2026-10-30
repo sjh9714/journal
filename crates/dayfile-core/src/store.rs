@@ -360,8 +360,17 @@ impl Store {
             }
         }
         problems.sort_by(|a, b| a.path.cmp(&b.path));
+        let memory: Vec<Problem> = self.problems.drain(..).filter(|p| p.path.starts_with(crate::memory::MEMORY_DIR)).collect();
         self.problems = problems;
+        self.problems.extend(memory);
+        self.reindex_memory()?;
         Ok(stats)
+    }
+
+    /// Swap in the memory files' problems, keeping the entries' ones.
+    pub(crate) fn set_memory_problems(&mut self, memory: Vec<Problem>) {
+        self.problems.retain(|p| !p.path.starts_with(crate::memory::MEMORY_DIR));
+        self.problems.extend(memory);
     }
 
     pub(crate) fn write_entry(&mut self, entry: &Entry) -> Result<()> {
