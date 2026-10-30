@@ -1,5 +1,5 @@
 //! Entry templates: `templates/<slug>.md` with frontmatter `name`, optional
-//! `tags`/`dayfile`, and a body that may use `{{date}}`, `{{weekday}}`,
+//! `tags`/`journal`, and a body that may use `{{date}}`, `{{weekday}}`,
 //! `{{time}}`, `{{year}}`.
 
 use crate::store::Store;

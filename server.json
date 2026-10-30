@@ -1,8 +1,11 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.sjh9714/dayfile",
-  "description": "Personal journal kept as Markdown files: search, On This Day, append to today, Day One import.",
-  "repository": { "url": "https://github.com/sjh9714/dayfile", "source": "github" },
+  "description": "Journal as agent memory: days drafted from git, calendar, photos; facts with a timeline; Markdown.",
+  "repository": {
+    "url": "https://github.com/sjh9714/dayfile",
+    "source": "github"
+  },
   "version": "0.1.0",
   "websiteUrl": "https://github.com/sjh9714/dayfile",
   "packages": [
@@ -10,7 +13,9 @@
       "registryType": "mcpb",
       "identifier": "https://github.com/sjh9714/dayfile/releases/download/v0.1.0/dayfile-0.1.0.mcpb",
       "fileSha256": "6cd9e177f6d90f4daa8ce7f46cdb1d5530fcad2a086863d7ba7385117a0b07a5",
-      "transport": { "type": "stdio" }
+      "transport": {
+        "type": "stdio"
+      }
     }
   ]
 }

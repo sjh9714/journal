@@ -56,6 +56,13 @@ Input, by target:
   Sleep) hides the banner even when the call succeeds.
 - **Location**: WKWebView geolocation fails silently; the app falls back to
   ipapi.co, so the first entry needs network.
+- **Capture**: put sources in the QA config, never the real one, e.g.
+  `{"capture": {"git": ["<dir>"], "git_author": "qa@example.com", "calendars": ["<file>.ics"], "photos": ["<dir>"]}}`.
+  Make today's commits with `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` and that
+  author; `crates/dayfile-core/tests/capture.rs` has a helper that writes a JPEG
+  with an EXIF capture time. The app captures once per launch after unlock.
+- **Memory**: seed facts with `dayfile remember` against the QA root
+  (`DAYFILE_INDEX_DIR` set too), then open the Memory view.
 - **Image drag and drop**: `qa_drop` from a Finder window that does not overlap
   the QA window. Drop twice in a row to check the first image survives.
 - **Not yet verified natively**: Windows and Linux bundles.

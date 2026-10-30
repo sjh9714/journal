@@ -3,39 +3,148 @@
   "name": "dayfile",
   "display_name": "Dayfile",
   "version": "__VERSION__",
-  "description": "Read and write your Markdown-file journal: search, On This Day, append to today.",
-  "long_description": "Dayfile keeps entries as plain Markdown files in a folder you own. This extension runs the bundled `dayfile` CLI as an MCP server over stdio with 11 tools (list, search, get, on_this_day, entries_on_date, tags, journals, create, append_to_today, update, delete). It uses the folder the Dayfile desktop app is set to, or ~/Journal.",
-  "author": { "name": "Jinhyuk Sung", "url": "https://github.com/sjh9714" },
-  "repository": { "type": "git", "url": "https://github.com/sjh9714/dayfile" },
+  "description": "Your journal as long-term memory: days drafted from git, calendar and photos, facts with a timeline, all in Markdown files you own.",
+  "long_description": "Dayfile keeps entries and memory as plain Markdown files in a folder you own. This extension runs the bundled `dayfile` CLI as an MCP server over stdio with 19 tools and two prompts: search and edit entries, draft a day from your commits, calendar feeds and photos, and record and recall facts about your life with valid time and recorded time. It uses the folder the Dayfile desktop app is set to, or ~/Journal.",
+  "author": {
+    "name": "Jinhyuk Sung",
+    "url": "https://github.com/sjh9714"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sjh9714/dayfile"
+  },
   "homepage": "https://github.com/sjh9714/dayfile",
   "documentation": "https://github.com/sjh9714/dayfile/blob/main/docs/mcp.md",
   "license": "MIT",
-  "keywords": ["journal", "diary", "markdown", "day one", "notes"],
+  "keywords": [
+    "journal",
+    "diary",
+    "memory",
+    "markdown",
+    "day one",
+    "lifelog"
+  ],
   "server": {
     "type": "binary",
     "entry_point": "server/dayfile-darwin",
     "mcp_config": {
       "command": "${__dirname}/server/dayfile-darwin",
-      "args": ["mcp", "serve"],
+      "args": [
+        "mcp",
+        "serve"
+      ],
       "env": {},
       "platform_overrides": {
-        "win32": { "command": "${__dirname}/server/dayfile-win.exe" },
-        "linux": { "command": "${__dirname}/server/dayfile-linux" }
+        "win32": {
+          "command": "${__dirname}/server/dayfile-win.exe"
+        },
+        "linux": {
+          "command": "${__dirname}/server/dayfile-linux"
+        }
       }
     }
   },
   "tools": [
-    { "name": "list_entries", "description": "List entries, newest first, with filters" },
-    { "name": "get_entry", "description": "Read one entry in full" },
-    { "name": "search_entries", "description": "Full-text search" },
-    { "name": "on_this_day", "description": "Entries from this day in other years" },
-    { "name": "entries_on_date", "description": "Entries on a given date" },
-    { "name": "list_tags", "description": "Tags with counts" },
-    { "name": "list_journals", "description": "Journals with counts" },
-    { "name": "create_entry", "description": "Create an entry" },
-    { "name": "append_to_today", "description": "Append a paragraph to today's entry" },
-    { "name": "update_entry", "description": "Update body, tags, star or journal" },
-    { "name": "delete_entry", "description": "Delete an entry" }
+    {
+      "name": "list_entries",
+      "description": "List entries, newest first, with filters"
+    },
+    {
+      "name": "get_entry",
+      "description": "Read one entry in full"
+    },
+    {
+      "name": "search_entries",
+      "description": "Full-text search"
+    },
+    {
+      "name": "on_this_day",
+      "description": "Entries from this day in other years"
+    },
+    {
+      "name": "entries_on_date",
+      "description": "Entries on a given date"
+    },
+    {
+      "name": "list_tags",
+      "description": "Tags with counts"
+    },
+    {
+      "name": "list_journals",
+      "description": "Journals with counts"
+    },
+    {
+      "name": "create_entry",
+      "description": "Create an entry"
+    },
+    {
+      "name": "append_to_today",
+      "description": "Append a paragraph to today's entry"
+    },
+    {
+      "name": "update_entry",
+      "description": "Update body, tags, star or journal"
+    },
+    {
+      "name": "delete_entry",
+      "description": "Move an entry to the trash"
+    },
+    {
+      "name": "capture_day",
+      "description": "Draft a day from git, calendar and photos"
+    },
+    {
+      "name": "list_drafts",
+      "description": "Drafts waiting for review"
+    },
+    {
+      "name": "accept_draft",
+      "description": "Keep a draft as an entry"
+    },
+    {
+      "name": "remember",
+      "description": "Record a fact about the user's life"
+    },
+    {
+      "name": "recall",
+      "description": "Facts true on a date, as known at a moment"
+    },
+    {
+      "name": "fact_history",
+      "description": "Every fact of a topic over time"
+    },
+    {
+      "name": "list_topics",
+      "description": "Memory topics"
+    },
+    {
+      "name": "retract_fact",
+      "description": "Mark a fact as never true"
+    }
   ],
-  "compatibility": { "platforms": ["darwin", "win32", "linux"] }
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ]
+  },
+  "prompts": [
+    {
+      "name": "review_day",
+      "description": "Turn a captured day into an entry and update memory",
+      "arguments": [
+        "date"
+      ],
+      "text": "Review my day ${arguments.date}"
+    },
+    {
+      "name": "weekly_review",
+      "description": "Look back over seven days and what changed in memory",
+      "arguments": [
+        "date"
+      ],
+      "text": "Review my week ending ${arguments.date}"
+    }
+  ]
 }
