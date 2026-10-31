@@ -457,7 +457,7 @@ fn main() -> Result<()> {
                     eprintln!("warning: {e}");
                 }
                 match &r.draft {
-                    Some(d) if r.added > 0 => println!("{} {}  {} commits, {} events, {} photos added  {}", r.date, short(&d.uuid), r.commits, r.events, r.photos, store.root().join(&d.path).display()),
+                    Some(d) if r.added > 0 => println!("{} {}  {} added  {}", r.date, short(&d.uuid), r.describe(), store.root().join(&d.path).display()),
                     Some(d) => println!("{} {}  nothing new since the last capture", r.date, short(&d.uuid)),
                     None => println!("{}  nothing to capture", r.date),
                 }

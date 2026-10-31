@@ -223,7 +223,7 @@ export const mockInvoke = async (cmd: string, args: Record<string, unknown> = {}
       const existing = [...entries.values()].find((e) => e.status === "draft" && e.created.startsWith(date));
       if (existing) return { date, added: 0, commits: 0, events: 0, photos: 0, draft: summary(existing), created: false, errors: [] };
       const id = uuid();
-      const body = "Standup and 1 more, 4 commits to shop-api\n\n- 09:30–09:45 · Standup\n- 10:12–16:40 · shop-api · 4 commits (Add order endpoint; Fix refund rounding; Tests for refunds; +1 more)\n- 19:00–21:00 · Algorithms study with Minji\n";
+      const body = "Standup +1, 4 commits to shop-api\n\n- 09:30–09:45 · Standup\n- 10:12–16:40 · shop-api · 4 commits (Add order endpoint; Fix refund rounding; Tests for refunds; +1 more)\n- 19:00–21:00 · Algorithms study with Minji\n";
       const e: Entry = { uuid: id, created: `${date}T21:00:00+09:00`, timezone: "Asia/Seoul", journal: "default", tags: [], starred: false, body, path: `entries/${date.slice(0, 4)}/${date}-${id.slice(0, 8)}.md`, location: null, weather: null, status: "draft", traces: ["git:a", "cal:b"] };
       entries.set(id, e);
       return { date, added: 6, commits: 4, events: 2, photos: 0, draft: summary(e), created: true, errors: [] };

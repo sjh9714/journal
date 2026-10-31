@@ -60,7 +60,7 @@ A draft looks like this, and stays out of the timeline, search and stats until
 you keep it:
 
 ```markdown
-Standup and 1 more, 4 commits to shop-api, 3 photos
+Standup +1, 4 commits to shop-api, 3 photos
 
 - 09:30–09:45 · Standup
 - 10:12–16:40 · shop-api · 4 commits (Add order endpoint; Fix refund rounding; +2 more)

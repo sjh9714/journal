@@ -56,6 +56,18 @@ pub struct CaptureReport {
     pub errors: Vec<String>,
 }
 
+impl CaptureReport {
+    /// What this run added, e.g. "3 commits, 1 photo".
+    pub fn describe(&self) -> String {
+        [(self.commits, "commit"), (self.events, "event"), (self.photos, "photo")]
+            .into_iter()
+            .filter(|(n, _)| *n > 0)
+            .map(|(n, noun)| format!("{n} {noun}{}", if n == 1 { "" } else { "s" }))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
 /// Photos embedded per run; the rest are still counted in the summary.
 const MAX_PHOTOS: usize = 12;
 
@@ -211,7 +223,7 @@ fn render_lines(commits: &[Commit], events: &[Event], photos: &[Photo]) -> Vec<S
 fn summary_line(commits: &[Commit], events: &[Event], photos: usize) -> String {
     let mut parts = Vec::new();
     if let Some(e) = events.iter().find(|e| e.start.is_some()).or(events.first()) {
-        parts.push(if events.len() > 1 { format!("{} and {} more", e.summary, events.len() - 1) } else { e.summary.clone() });
+        parts.push(if events.len() > 1 { format!("{} +{}", e.summary, events.len() - 1) } else { e.summary.clone() });
     }
     if !commits.is_empty() {
         let mut repos: Vec<&str> = commits.iter().map(|c| c.repo.as_str()).collect();

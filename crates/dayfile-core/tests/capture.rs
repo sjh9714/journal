@@ -90,9 +90,10 @@ fn capture_drafts_the_day_once_and_accept_keeps_it() {
     let r = store.capture(day(), &cfg).unwrap();
     assert!(r.errors.is_empty(), "{:?}", r.errors);
     assert_eq!((r.commits, r.events, r.photos, r.created), (2, 2, 1, true));
+    assert_eq!(r.describe(), "2 commits, 2 events, 1 photo");
     let draft = r.draft.unwrap();
     assert!(draft.draft);
-    assert_eq!(draft.title, "Standup and 1 more, 2 commits to shop-api, 1 photo");
+    assert_eq!(draft.title, "Standup +1, 2 commits to shop-api, 1 photo");
     let e = store.get(&draft.uuid).unwrap();
     assert!(e.body.contains("- 09:30–09:45 · Standup"), "{}", e.body);
     assert!(e.body.contains("- 10:12–16:40 · shop-api · 2 commits (Add order endpoint; Fix refund rounding)"), "{}", e.body);
@@ -146,7 +147,7 @@ fn a_failing_source_does_not_stop_the_others() {
         ..Default::default()
     };
     let r = store.capture(day(), &cfg).unwrap();
-    assert_eq!(r.events, 1);
+    assert_eq!(r.describe(), "1 event");
     assert_eq!(r.errors.len(), 2, "{:?}", r.errors);
     assert!(r.errors.iter().all(|e| !e.contains("private-token")), "secret URL path leaked: {:?}", r.errors);
     let e = store.get(&r.draft.unwrap().uuid).unwrap();
