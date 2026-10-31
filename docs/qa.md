@@ -43,7 +43,10 @@ Input, by target:
 | Korean and other IME text | `qa_paste` | |
 | `<input type=time>` | none in WKWebView; the app uses hour/minute selects | |
 
-`orca computer paste-text` exists but has not been tried against the editor.
+`qa_click` does not focus the editor. Click it by coordinates with
+`orca computer click --x --y`, then `qa_paste` or `orca computer paste-text`,
+and wait at least 1.5 s before asserting. With the system input source on
+Korean, a simulated Backspace is unreliable.
 
 ## Feature notes
 
@@ -56,13 +59,10 @@ Input, by target:
   Sleep) hides the banner even when the call succeeds.
 - **Location**: WKWebView geolocation fails silently; the app falls back to
   ipapi.co, so the first entry needs network.
-- **Capture**: put sources in the QA config, never the real one, e.g.
-  `{"capture": {"git": ["<dir>"], "git_author": "qa@example.com", "calendars": ["<file>.ics"], "photos": ["<dir>"]}}`.
-  Make today's commits with `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` and that
-  author; `crates/dayfile-core/tests/capture.rs` has a helper that writes a JPEG
-  with an EXIF capture time. The app captures once per launch after unlock.
-- **Memory**: seed facts with `dayfile remember` against the QA root
-  (`DAYFILE_INDEX_DIR` set too), then open the Memory view.
+- **Capture and memory**: `scripts/qa/fixtures.sh "$QA_DIR"` before `qa_launch`
+  seeds a Korean day dated today: commits, calendar, an EXIF photo and facts,
+  with sources in the QA config, never the real one. The app captures once per
+  launch after unlock.
 - **Image drag and drop**: `qa_drop` from a Finder window that does not overlap
   the QA window. Drop twice in a row to check the first image survives.
 - **Not yet verified natively**: Windows and Linux bundles.

@@ -3,7 +3,7 @@
 ```sh
 (cd apps/desktop && npm install)
 scripts/check.sh                  # tests, clippy, web build; what CI runs
-git config core.hooksPath .githooks   # run it before every push
+git config core.hooksPath .githooks   # clippy before commit, all of it before push
 cd apps/desktop && npm run tauri dev  # native app
 npx vite                          # UI only, in a browser, with mock data
 ```

@@ -426,17 +426,32 @@ fn exif_time(path: &Path, tz: Tz) -> Option<DateTime<Tz>> {
 mod tests {
     use super::{commit_words, plain_words};
 
+    /// New bypasses join these tables; see CODING_STANDARDS.md.
     #[test]
-    fn event_titles_lose_anything_link_like() {
-        assert_eq!(plain_words("![x](https://evil.example/p.png) [Call](https://evil.example)"), "x Call");
-        assert_eq!(plain_words("Sync with a@evil.com at evil.com/x or evil.co, EVIL.CO:8080/x localhost:3000 www.x.org 例え.テスト"), "Sync with at or");
-        assert_eq!(plain_words("mailto:me javascript:alert(1) www.evil.example"), "1");
-        assert_eq!(plain_words("Standup 10:30 v1.2 release 3.5h 회의 준비"), "Standup 10:30 v1.2 release 3.5h 회의 준비");
-    }
-
-    #[test]
-    fn commit_subjects_keep_file_names_but_lose_links() {
-        assert_eq!(commit_words("Fix capture.rs ![x](https://evil.example) for a@b.c see www.x.org"), "Fix capture.rs x for see");
-        assert_eq!(commit_words("[](https://x.y)"), "(no message)");
+    fn hostile_text_stays_plain() {
+        for (input, want) in [
+            ("![x](https://evil.example/p.png) [Call](https://evil.example)", "x Call"),
+            ("Sync with a@evil.com at evil.com/x or evil.co, EVIL.CO:8080/x localhost:3000 www.x.org 例え.テスト", "Sync with at or"),
+            ("mailto:me javascript:alert(1) www.evil.example", "1"),
+            ("<https://evil.example>", ""),
+            ("HTTP://EVIL.EXAMPLE ftp://evil.example", ""),
+            ("mailto:me@evil.example", ""),
+            ("evil.example/path", ""),
+            ("[ref]: https://evil.example", "ref :"),
+            ("a\n\n# heading\n- [ ] item", "a heading - item"),
+            ("<img src=x onerror=alert(1)>", "img src=x onerror=alert 1"),
+            ("Standup 10:30 v1.2 release 3.5h 회의 준비", "Standup 10:30 v1.2 release 3.5h 회의 준비"),
+        ] {
+            assert_eq!(plain_words(input), want, "event title {input:?}");
+        }
+        for (input, want) in [
+            ("Fix capture.rs ![x](https://evil.example) for a@b.c see www.x.org", "Fix capture.rs x for see"),
+            ("[](https://x.y)", "(no message)"),
+            ("see [docs](http://evil.example)", "see docs"),
+            ("HTTP://EVIL.EXAMPLE WWW.EVIL.EXAMPLE done", "done"),
+            ("**bold** `code`\n\n# heading", "bold code heading"),
+        ] {
+            assert_eq!(commit_words(input), want, "commit subject {input:?}");
+        }
     }
 }
